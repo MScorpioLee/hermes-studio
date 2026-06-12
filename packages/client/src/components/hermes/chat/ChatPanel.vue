@@ -31,8 +31,9 @@ import ChatInput from "./ChatInput.vue";
 import ConversationMonitorPane from "./ConversationMonitorPane.vue";
 import MessageList from "./MessageList.vue";
 import SessionListItem from "./SessionListItem.vue";
-import DrawerPanel from "./DrawerPanel.vue";
 import OutlinePanel from "./OutlinePanel.vue";
+import FilesPanel from "./FilesPanel.vue";
+import TerminalPanel from "./TerminalPanel.vue";
 import { useSessionSearch } from "@/composables/useSessionSearch";
 import ProfileSelector from "@/components/layout/ProfileSelector.vue";
 import ModelSelector from "@/components/layout/ModelSelector.vue";
@@ -52,12 +53,15 @@ const { t } = useI18n();
 const { openSessionSearch } = useSessionSearch();
 const currentUsername = computed(() => getStoredUsername());
 
-const showDrawer = ref(false);
-const drawerActiveTab = ref<"terminal" | "files">("files");
 const showOutline = ref(false);
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null);
+const chatContentWrapperRef = ref<HTMLElement | null>(null);
 const showVersionManagement = ref(false);
 const showChangelog = ref(false);
+const showToolPanel = ref(false);
+const activeToolPanel = ref<"files" | "terminal">("terminal");
+const toolPanelWidth = ref(560);
+const toolResizeStart = ref<{ x: number; width: number } | null>(null);
 
 const currentMode = ref<"chat" | "live">("chat");
 
@@ -82,6 +86,9 @@ const isMobile = ref(false);
 const isDesktopShell = computed(() =>
   (window as typeof window & { hermesDesktop?: { isDesktop?: boolean } }).hermesDesktop?.isDesktop === true,
 );
+const toolPanelStyle = computed(() => ({
+  width: isMobile.value ? "100%" : `${toolPanelWidth.value}px`,
+}));
 
 function sessionHref(sessionId: string) {
   return router.resolve({
@@ -97,6 +104,44 @@ function openSessionInNewTab(sessionId: string) {
 
 function handleOutlineNavigate(target: { messageId: string; anchorId: string }) {
   messageListRef.value?.scrollToAnchor(target.messageId, target.anchorId);
+}
+
+function toolPanelMaxWidth() {
+  const available = chatContentWrapperRef.value?.clientWidth || window.innerWidth;
+  return Math.max(320, available - 120);
+}
+
+function handleToolResizeMove(event: PointerEvent) {
+  const start = toolResizeStart.value;
+  if (!start) return;
+  const delta = start.x - event.clientX;
+  const maxWidth = toolPanelMaxWidth();
+  toolPanelWidth.value = Math.min(
+    Math.max(360, start.width + delta),
+    maxWidth,
+  );
+}
+
+function stopToolResize() {
+  if (!toolResizeStart.value) return;
+  toolResizeStart.value = null;
+  window.removeEventListener("pointermove", handleToolResizeMove);
+  window.removeEventListener("pointerup", stopToolResize);
+  document.body.style.userSelect = "";
+  document.body.style.cursor = "";
+}
+
+function startToolResize(event: PointerEvent) {
+  if (isMobile.value) return;
+  event.preventDefault();
+  toolResizeStart.value = {
+    x: event.clientX,
+    width: toolPanelWidth.value,
+  };
+  window.addEventListener("pointermove", handleToolResizeMove);
+  window.addEventListener("pointerup", stopToolResize);
+  document.body.style.userSelect = "none";
+  document.body.style.cursor = "col-resize";
 }
 
 async function handleSessionClick(sessionId: string) {
@@ -131,6 +176,7 @@ onMounted(() => {
 onUnmounted(() => {
   mobileQuery?.removeEventListener("change", handleMobileChange);
   window.removeEventListener("hermes:open-page-sidebar", openPageSidebar);
+  stopToolResize();
 });
 const showRenameModal = ref(false);
 const renameValue = ref("");
@@ -1597,6 +1643,34 @@ async function handleSessionModelCustomSubmit() {
             <NTooltip trigger="hover">
               <template #trigger>
                 <NButton
+                  class="header-tool-toggle"
+                  :class="{ active: showToolPanel }"
+                  quaternary
+                  size="small"
+                  @click="showToolPanel = !showToolPanel"
+                  circle
+                >
+                  <template #icon>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                    >
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <line x1="9" y1="3" x2="9" y2="21" />
+                      <line x1="15" y1="3" x2="15" y2="21" />
+                    </svg>
+                  </template>
+                </NButton>
+              </template>
+              {{ t("drawer.files") }} / {{ t("drawer.terminal") }}
+            </NTooltip>
+            <NTooltip trigger="hover">
+              <template #trigger>
+                <NButton
                   quaternary
                   size="small"
                   @click="showOutline = !showOutline"
@@ -1681,7 +1755,7 @@ async function handleSessionModelCustomSubmit() {
       </header>
 
       <template v-if="currentMode === 'chat'">
-        <div class="chat-content-wrapper">
+        <div ref="chatContentWrapperRef" class="chat-content-wrapper">
           <div class="chat-main-content">
             <MessageList ref="messageListRef" />
           </div>
@@ -1690,6 +1764,47 @@ async function handleSessionModelCustomSubmit() {
             :messages="chatStore.messages"
             @navigate="handleOutlineNavigate"
           />
+          <aside
+            v-if="showToolPanel"
+            class="chat-tool-panel"
+            :style="toolPanelStyle"
+          >
+            <div
+              class="chat-tool-resize-handle"
+              @pointerdown="startToolResize"
+            />
+            <div class="chat-tool-panel-inner">
+              <div class="chat-tool-tabs" role="tablist">
+                <button
+                  class="chat-tool-tab"
+                  :class="{ active: activeToolPanel === 'files' }"
+                  type="button"
+                  role="tab"
+                  :aria-selected="activeToolPanel === 'files'"
+                  @click="activeToolPanel = 'files'"
+                >
+                  {{ t("drawer.files") }}
+                </button>
+                <button
+                  class="chat-tool-tab"
+                  :class="{ active: activeToolPanel === 'terminal' }"
+                  type="button"
+                  role="tab"
+                  :aria-selected="activeToolPanel === 'terminal'"
+                  @click="activeToolPanel = 'terminal'"
+                >
+                  {{ t("drawer.terminal") }}
+                </button>
+              </div>
+              <div class="chat-tool-content">
+                <FilesPanel v-show="activeToolPanel === 'files'" />
+                <TerminalPanel
+                  v-show="activeToolPanel === 'terminal'"
+                  :visible="showToolPanel && activeToolPanel === 'terminal'"
+                />
+              </div>
+            </div>
+          </aside>
         </div>
         <ChatInput />
       </template>
@@ -1698,26 +1813,6 @@ async function handleSessionModelCustomSubmit() {
         :human-only="sessionBrowserPrefsStore.humanOnly"
       />
     </div>
-
-    <!-- Floating drawer button -->
-    <div class="drawer-button-wrapper">
-      <div class="drawer-button" @click="showDrawer = true">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-        >
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          <line x1="9" y1="3" x2="9" y2="21" />
-          <line x1="15" y1="3" x2="15" y2="21" />
-        </svg>
-      </div>
-    </div>
-
-    <DrawerPanel v-model:show="showDrawer" :active-tab="drawerActiveTab" />
   </div>
 </template>
 
@@ -2625,124 +2720,115 @@ async function handleSessionModelCustomSubmit() {
   cursor: default;
 }
 
-// ─── Drawer button ─────────────────────────────────────────────
+.header-tool-toggle.active {
+  color: var(--accent-primary);
+  background: rgba(var(--accent-primary-rgb), 0.1);
+}
 
-.drawer-button-wrapper {
+.chat-tool-panel {
   position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 100;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  min-width: 320px;
+  max-width: 100%;
   background: $bg-card;
-  border-radius: 50%;
-  box-shadow:
-    0 0 10px rgba(255, 107, 107, 0.4),
-    0 0 20px rgba(255, 107, 107, 0.2);
-  animation: rainbow-glow 8s linear infinite;
-  transition: all $transition-fast;
+  border-left: 1px solid $border-color;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
 
-  &:hover {
-    animation-play-state: paused;
-    box-shadow:
-      0 0 15px rgba(255, 107, 107, 0.6),
-      0 0 30px rgba(255, 107, 107, 0.3);
+.chat-tool-resize-handle {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 3;
+
+  &::after {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: transparent;
+    transition: background $transition-fast;
+  }
+
+  &:hover::after {
+    background: var(--accent-primary);
   }
 }
 
-.drawer-button {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(var(--accent-primary-rgb), 0.1);
+.chat-tool-panel-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chat-tool-tabs {
   display: flex;
   align-items: center;
-  justify-content: center;
+  flex-shrink: 0;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid $border-color;
+}
+
+.chat-tool-tab {
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: $radius-sm;
+  background: transparent;
+  color: $text-secondary;
   cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
   transition: all $transition-fast;
 
-  svg {
-    width: 18px;
-    height: 18px;
-    color: var(--accent-primary);
+  &:hover {
+    color: $text-primary;
+    background: rgba(var(--accent-primary-rgb), 0.06);
   }
 
-  &:hover {
-    transform: scale(1.1);
+  &.active {
+    color: var(--accent-primary);
+    background: rgba(var(--accent-primary-rgb), 0.12);
   }
 }
 
-@keyframes rainbow-glow {
-  0% {
-    box-shadow:
-      0 0 0 2px #ff6b6b,
-      0 0 10px rgba(255, 107, 107, 0.4),
-      0 0 20px rgba(255, 107, 107, 0.2);
-    border-color: #ff6b6b;
-    color: #ff6b6b;
-  }
-  16.66% {
-    box-shadow:
-      0 0 0 2px #feca57,
-      0 0 10px rgba(254, 202, 87, 0.4),
-      0 0 20px rgba(254, 202, 87, 0.2);
-    border-color: #feca57;
-    color: #feca57;
-  }
-  33.33% {
-    box-shadow:
-      0 0 0 2px #48dbfb,
-      0 0 10px rgba(72, 219, 251, 0.4),
-      0 0 20px rgba(72, 219, 251, 0.2);
-    border-color: #48dbfb;
-    color: #48dbfb;
-  }
-  50% {
-    box-shadow:
-      0 0 0 2px #ff9ff3,
-      0 0 10px rgba(255, 159, 243, 0.4),
-      0 0 20px rgba(255, 159, 243, 0.2);
-    border-color: #ff9ff3;
-    color: #ff9ff3;
-  }
-  66.66% {
-    box-shadow:
-      0 0 0 2px #54a0ff,
-      0 0 10px rgba(84, 160, 255, 0.4),
-      0 0 20px rgba(84, 160, 255, 0.2);
-    border-color: #54a0ff;
-    color: #54a0ff;
-  }
-  83.33% {
-    box-shadow:
-      0 0 0 2px #5f27cd,
-      0 0 10px rgba(95, 39, 205, 0.4),
-      0 0 20px rgba(95, 39, 205, 0.2);
-    border-color: #5f27cd;
-    color: #5f27cd;
-  }
-  100% {
-    box-shadow:
-      0 0 0 2px #ff6b6b,
-      0 0 10px rgba(255, 107, 107, 0.4),
-      0 0 20px rgba(255, 107, 107, 0.2);
-    border-color: #ff6b6b;
-    color: #ff6b6b;
-  }
+.chat-tool-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-tool-content > * {
+  height: 100%;
+  min-height: 0;
 }
 
 @media (max-width: $breakpoint-mobile) {
-  .drawer-button-wrapper {
-    right: 12px;
+  .chat-tool-panel {
+    left: 0;
+    width: 100% !important;
+    min-width: 0;
+    border-left: none;
+    box-shadow: none;
   }
 
-  .drawer-button {
-    width: 36px;
-    height: 36px;
-
-    svg {
-      width: 16px;
-      height: 16px;
-    }
+  .chat-tool-resize-handle {
+    display: none;
   }
 }
 </style>
