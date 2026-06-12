@@ -177,6 +177,128 @@ export default {
     toolsClearExcluded: 'Clear excluded',
   },
 
+  workflows: {
+    title: 'Workflows',
+    subtitle: 'Draft automation flows for cron jobs, webhooks, agents, decisions, and delivery targets.',
+    defaultDraftName: 'Untitled workflow',
+    templatesTitle: 'Templates',
+    inspectorTitle: 'Inspector',
+    draftName: 'Workflow name',
+    localDraft: 'Local draft',
+    actions: {
+      reset: 'Reset',
+      addStep: 'Add step',
+    },
+    stats: {
+      triggers: '{count} trigger | {count} triggers',
+      agents: '{count} agent | {count} agents',
+      deliveries: '{count} delivery | {count} deliveries',
+    },
+    fields: {
+      nodeId: 'Node ID',
+      delivery: 'Delivery',
+    },
+    delivery: {
+      origin: 'Origin chat',
+      telegram: 'Telegram',
+      githubComment: 'GitHub comment',
+      local: 'Local file',
+    },
+    edges: {
+      degraded: 'Degraded',
+      healthy: 'Healthy',
+    },
+    templates: {
+      prReview: {
+        title: 'PR review',
+        schedule: 'GitHub pull_request webhook',
+        tone: 'Security, performance, tests',
+      },
+      dailyDigest: {
+        title: 'Daily digest',
+        schedule: '0 8 * * *',
+        tone: 'Collect, summarize, deliver',
+      },
+      deployCheck: {
+        title: 'Deploy check',
+        schedule: 'Deployment webhook',
+        tone: 'Smoke test and escalation',
+      },
+    },
+    nodes: {
+      githubWebhook: {
+        phase: 'Trigger',
+        title: 'GitHub webhook',
+        detail: 'Pull request event payload enters the workflow.',
+      },
+      reviewAgent: {
+        phase: 'Agent',
+        title: 'Review agent',
+        detail: 'Reads the diff and checks risk, quality, and coverage.',
+      },
+      signalGate: {
+        phase: 'Decision',
+        title: 'Signal gate',
+        detail: 'Routes noisy runs to silence and findings to delivery.',
+      },
+      githubComment: {
+        phase: 'Delivery',
+        title: 'PR comment',
+        detail: 'Posts the final review back to the pull request.',
+      },
+      cron: {
+        phase: 'Trigger',
+        title: 'Cron schedule',
+        detail: 'Starts the digest on a fixed daily cadence.',
+      },
+      collector: {
+        phase: 'Agent',
+        title: 'Collector',
+        detail: 'Gathers recent repo, issue, and web activity.',
+      },
+      digest: {
+        phase: 'Agent',
+        title: 'Digest writer',
+        detail: 'Condenses findings into a short operational brief.',
+      },
+      telegram: {
+        phase: 'Delivery',
+        title: 'Team channel',
+        detail: 'Sends the digest to the selected Telegram destination.',
+      },
+      deployWebhook: {
+        phase: 'Trigger',
+        title: 'Deploy webhook',
+        detail: 'Receives version, service, and environment metadata.',
+      },
+      smokeTest: {
+        phase: 'Agent',
+        title: 'Smoke test',
+        detail: 'Checks health endpoints and version responses.',
+      },
+      healthGate: {
+        phase: 'Decision',
+        title: 'Health gate',
+        detail: 'Separates healthy deploys from degraded ones.',
+      },
+      slack: {
+        phase: 'Delivery',
+        title: 'Ops channel',
+        detail: 'Sends diagnostics to Slack when action is needed.',
+      },
+      silent: {
+        phase: 'Delivery',
+        title: '[SILENT]',
+        detail: 'Suppresses delivery when the deploy is healthy.',
+      },
+      custom: {
+        phase: 'Agent',
+        title: 'Agent step {count}',
+        detail: 'Local draft step ready for configuration.',
+      },
+    },
+  },
+
   // Sidebar
   sidebar: {
     chat: 'Chat',
@@ -199,6 +321,7 @@ export default {
     gateways: 'Gateways',
     terminal: 'Terminal',
     groupChat: 'Group Chat',
+    workflows: 'Workflows',
     files: 'Files',
     devices: 'Devices',
     groupConversation: 'Conversation',

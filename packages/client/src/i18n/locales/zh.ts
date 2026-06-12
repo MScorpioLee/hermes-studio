@@ -178,6 +178,128 @@ export default {
     toolsClearExcluded: '清空排除',
   },
 
+  workflows: {
+    title: '工作流',
+    subtitle: '编排定时任务、Webhook、Agent、判断节点和投递目标的自动化草稿。',
+    defaultDraftName: '未命名工作流',
+    templatesTitle: '模板',
+    inspectorTitle: '检查器',
+    draftName: '工作流名称',
+    localDraft: '本地草稿',
+    actions: {
+      reset: '重置',
+      addStep: '添加步骤',
+    },
+    stats: {
+      triggers: '{count} 个触发器',
+      agents: '{count} 个 Agent',
+      deliveries: '{count} 个投递',
+    },
+    fields: {
+      nodeId: '节点 ID',
+      delivery: '投递',
+    },
+    delivery: {
+      origin: '原对话',
+      telegram: 'Telegram',
+      githubComment: 'GitHub 评论',
+      local: '本地文件',
+    },
+    edges: {
+      degraded: '异常',
+      healthy: '正常',
+    },
+    templates: {
+      prReview: {
+        title: 'PR 审查',
+        schedule: 'GitHub pull_request Webhook',
+        tone: '安全、性能、测试',
+      },
+      dailyDigest: {
+        title: '每日摘要',
+        schedule: '0 8 * * *',
+        tone: '收集、总结、投递',
+      },
+      deployCheck: {
+        title: '部署检查',
+        schedule: 'Deployment Webhook',
+        tone: '冒烟测试和升级通知',
+      },
+    },
+    nodes: {
+      githubWebhook: {
+        phase: '触发',
+        title: 'GitHub Webhook',
+        detail: 'Pull request 事件载荷进入工作流。',
+      },
+      reviewAgent: {
+        phase: 'Agent',
+        title: '审查 Agent',
+        detail: '读取 diff 并检查风险、质量和覆盖率。',
+      },
+      signalGate: {
+        phase: '判断',
+        title: '信号门',
+        detail: '无变化时静默，有发现时投递。',
+      },
+      githubComment: {
+        phase: '投递',
+        title: 'PR 评论',
+        detail: '把最终审查结果发回 pull request。',
+      },
+      cron: {
+        phase: '触发',
+        title: 'Cron 定时',
+        detail: '按固定的每日节奏启动摘要。',
+      },
+      collector: {
+        phase: 'Agent',
+        title: '收集器',
+        detail: '收集最近的仓库、issue 和网页动态。',
+      },
+      digest: {
+        phase: 'Agent',
+        title: '摘要撰写',
+        detail: '把发现压缩成简短的运营简报。',
+      },
+      telegram: {
+        phase: '投递',
+        title: '团队频道',
+        detail: '把摘要发送到选定的 Telegram 目标。',
+      },
+      deployWebhook: {
+        phase: '触发',
+        title: '部署 Webhook',
+        detail: '接收版本、服务和环境元数据。',
+      },
+      smokeTest: {
+        phase: 'Agent',
+        title: '冒烟测试',
+        detail: '检查健康端点和版本响应。',
+      },
+      healthGate: {
+        phase: '判断',
+        title: '健康门',
+        detail: '区分健康部署和异常部署。',
+      },
+      slack: {
+        phase: '投递',
+        title: '运维频道',
+        detail: '需要处理时向 Slack 发送诊断。',
+      },
+      silent: {
+        phase: '投递',
+        title: '[SILENT]',
+        detail: '部署正常时抑制通知。',
+      },
+      custom: {
+        phase: 'Agent',
+        title: 'Agent 步骤 {count}',
+        detail: '可继续配置的本地草稿步骤。',
+      },
+    },
+  },
+
   sidebar: {
     chat: '对话',
     search: '搜索',
@@ -199,6 +321,7 @@ export default {
     gateways: '网关',
     terminal: '终端',
     groupChat: '群聊',
+    workflows: '工作流',
     files: '文件',
     devices: '设备',
     groupConversation: '对话',

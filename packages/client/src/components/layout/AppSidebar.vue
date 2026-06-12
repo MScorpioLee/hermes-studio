@@ -139,6 +139,17 @@ function openVersionManagement() {
             </svg>
             <span>{{ t("sidebar.groupChat") }}<span class="beta-tag">(beta)</span></span>
           </RouteLinkItem>
+          <RouteLinkItem class="nav-item" :to="{ name: 'hermes.workflows' }" :active="selectedKey === 'hermes.workflows'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 3h5v5H6z" />
+              <path d="M13 16h5v5h-5z" />
+              <path d="M4 18a3 3 0 0 1 3-3h2" />
+              <path d="M15 6h2a3 3 0 0 1 3 3v1" />
+              <path d="M9 18h4" />
+              <path d="M11 5h4" />
+            </svg>
+            <span>{{ t("sidebar.workflows") }}</span>
+          </RouteLinkItem>
           <button class="nav-item" @click="openSessionSearch">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="11" cy="11" r="7" />
