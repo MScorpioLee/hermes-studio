@@ -54,6 +54,8 @@ export interface HermesMessage {
   session_id: string
   role: 'user' | 'assistant' | 'system' | 'tool' | 'command'
   content: string
+  display_role?: 'user' | 'assistant' | 'system' | 'tool' | 'command' | null
+  display_content?: string | null
   tool_call_id: string | null
   tool_calls: any[] | null
   tool_name: string | null

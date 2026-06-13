@@ -415,13 +415,15 @@ function mapHermesMessages(msgs: HermesMessage[]): Message[] {
     }
 
     // Normal user/assistant/command messages
+    const displayRole = msg.display_role || msg.role
+    const displayContent = msg.display_content ?? msg.content
     result.push({
       id: String(msg.id),
-      role: msg.role,
-      content: msg.content || '',
+      role: displayRole,
+      content: displayContent || '',
       timestamp: Math.round(msg.timestamp * 1000),
       reasoning: msg.reasoning ? msg.reasoning : undefined,
-      systemType: msg.role === 'command' ? 'command' : undefined,
+      systemType: displayRole === 'command' ? 'command' : undefined,
       finishReason: readFinishReason(msg),
       runMarker: readRunMarker(msg),
     })
@@ -1748,9 +1750,10 @@ export const useChatStore = defineStore('chat', () => {
     const isBridgeSlashCommand = !isCodingAgentSession && content.trim().startsWith('/')
     const isBridgeCompressCommand = isBridgeSlashCommand && /^\/compress(?:\s|$)/i.test(content.trim())
     const isBridgePlanCommand = isBridgeSlashCommand && /^\/plan(?:\s|$)/i.test(content.trim())
+    const isBridgeSkillCommand = isBridgeSlashCommand && /^\/skill(?:\s|$)/i.test(content.trim())
     const isBridgeGoalCommand = isBridgeSlashCommand && /^\/goal(?:\s|$)/i.test(content.trim())
     const wasLiveBeforeSend = isSessionLive(sid)
-    const shouldQueue = wasLiveBeforeSend && (!isBridgeSlashCommand || isBridgePlanCommand)
+    const shouldQueue = wasLiveBeforeSend && (!isBridgeSlashCommand || isBridgePlanCommand || isBridgeSkillCommand)
 
     const userMsg: Message = {
       id: uid(),

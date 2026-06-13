@@ -36,6 +36,8 @@ const showAddAgentModal = ref(false)
 const showCompressionModal = ref(false)
 const showChangelog = ref(false)
 const showVersionManagement = ref(false)
+const showSettingsPopover = ref(false)
+const modelModalOpen = ref(false)
 const compressionConfig = ref({ triggerTokens: 100000, maxHistoryTokens: 32000, tailMessageCount: 10 })
 const isCompressing = ref(false)
 const selectedProfile = ref<string | null>(null)
@@ -123,6 +125,11 @@ async function handleUpdate() {
 function handleLogout() {
     localStorage.clear()
     window.location.reload()
+}
+
+function handleSettingsPopoverShowChange(show: boolean) {
+    if (!show && modelModalOpen.value) return
+    showSettingsPopover.value = show
 }
 
 function generateCode(): string {
@@ -432,10 +439,12 @@ async function handleApproval(choice: 'once' | 'session' | 'always' | 'deny') {
             </div>
             <div class="page-sidebar-bottom">
                 <NPopover
+                    :show="showSettingsPopover"
                     trigger="click"
                     placement="top-start"
                     :show-arrow="false"
                     raw
+                    @update:show="handleSettingsPopoverShowChange"
                 >
                     <template #trigger>
                         <button class="page-sidebar-menu-btn" type="button">
@@ -448,7 +457,7 @@ async function handleApproval(choice: 'once' | 'session' | 'always' | 'deny') {
                     </template>
                     <div class="page-sidebar-popover">
                         <ProfileSelector />
-                        <ModelSelector />
+                        <ModelSelector @modal-show-change="modelModalOpen = $event" />
                         <div class="page-sidebar-popover-row">
                             <div
                                 class="status-indicator"

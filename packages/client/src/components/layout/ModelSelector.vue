@@ -5,6 +5,10 @@ import { useAppStore } from '@/stores/hermes/app'
 import { useProfilesStore } from '@/stores/hermes/profiles'
 import { useI18n } from 'vue-i18n'
 
+const emit = defineEmits<{
+  'modal-show-change': [show: boolean]
+}>()
+
 const { t } = useI18n()
 const appStore = useAppStore()
 const profilesStore = useProfilesStore()
@@ -87,7 +91,7 @@ function handleSelect(model: string, provider: string) {
   const meta = activeModelGroups.value.find(g => g.provider === provider)?.model_meta?.[model]
   if (meta?.disabled) return
   appStore.switchModel(model, provider)
-  showModal.value = false
+  setModalShow(false)
   searchQuery.value = ''
 }
 
@@ -106,9 +110,14 @@ function handleCustomSubmit() {
   const meta = activeModelGroups.value.find(g => g.provider === customProvider.value)?.model_meta?.[model]
   if (meta?.disabled) return
   appStore.switchModel(model, customProvider.value)
-  showModal.value = false
+  setModalShow(false)
   searchQuery.value = ''
   customInput.value = ''
+}
+
+function setModalShow(show: boolean) {
+  showModal.value = show
+  emit('modal-show-change', show)
 }
 
 function openModal() {
@@ -116,7 +125,11 @@ function openModal() {
   searchQuery.value = ''
   customInput.value = ''
   customProvider.value = appStore.selectedProvider
-  showModal.value = true
+  setModalShow(true)
+}
+
+function handleModalShowChange(show: boolean) {
+  setModalShow(show)
 }
 </script>
 
@@ -131,11 +144,12 @@ function openModal() {
     </button>
 
     <NModal
-      v-model:show="showModal"
+      :show="showModal"
       preset="card"
       :title="t('models.title')"
       :style="{ width: 'min(480px, calc(100vw - 32px))' }"
       :mask-closable="true"
+      @update:show="handleModalShowChange"
     >
       <NInput
         v-model:value="searchQuery"

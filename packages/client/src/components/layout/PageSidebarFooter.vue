@@ -19,6 +19,8 @@ const { t } = useI18n()
 
 const showChangelog = ref(false)
 const showVersionManagement = ref(false)
+const showSettingsPopover = ref(false)
+const modelModalOpen = ref(false)
 const currentUsername = computed(() => getStoredUsername())
 const isDesktopShell = computed(() =>
   (window as typeof window & { hermesDesktop?: { isDesktop?: boolean } }).hermesDesktop?.isDesktop === true,
@@ -53,15 +55,22 @@ function handleLogout() {
   localStorage.clear()
   window.location.reload()
 }
+
+function handleSettingsPopoverShowChange(show: boolean) {
+  if (!show && modelModalOpen.value) return
+  showSettingsPopover.value = show
+}
 </script>
 
 <template>
   <div class="page-sidebar-bottom">
     <NPopover
+      :show="showSettingsPopover"
       trigger="click"
       placement="top-start"
       :show-arrow="false"
       raw
+      @update:show="handleSettingsPopoverShowChange"
     >
       <template #trigger>
         <button class="page-sidebar-menu-btn" type="button">
@@ -74,7 +83,7 @@ function handleLogout() {
       </template>
       <div class="page-sidebar-popover">
         <ProfileSelector />
-        <ModelSelector />
+        <ModelSelector @modal-show-change="modelModalOpen = $event" />
         <div class="page-sidebar-popover-row">
           <div
             class="status-indicator"

@@ -57,6 +57,8 @@ const messageListRef = ref<InstanceType<typeof MessageList> | null>(null);
 const chatContentWrapperRef = ref<HTMLElement | null>(null);
 const showVersionManagement = ref(false);
 const showChangelog = ref(false);
+const showSettingsPopover = ref(false);
+const modelModalOpen = ref(false);
 const showToolPanel = ref(false);
 const activeToolPanel = ref<"files" | "terminal">("files");
 const toolPanelWidth = ref(560);
@@ -730,6 +732,11 @@ function handleLogout() {
   window.location.reload();
 }
 
+function handleSettingsPopoverShowChange(show: boolean) {
+  if (!show && modelModalOpen.value) return;
+  showSettingsPopover.value = show;
+}
+
 function handleContextMenu(e: MouseEvent, sessionId: string) {
   e.preventDefault();
   contextSessionId.value = sessionId;
@@ -1164,10 +1171,12 @@ async function handleSessionModelCustomSubmit() {
       </div>
       <div v-if="showSessions" class="page-sidebar-bottom">
         <NPopover
+          :show="showSettingsPopover"
           trigger="click"
           placement="top-start"
           :show-arrow="false"
           raw
+          @update:show="handleSettingsPopoverShowChange"
         >
           <template #trigger>
             <button class="page-sidebar-menu-btn" type="button">
@@ -1189,7 +1198,7 @@ async function handleSessionModelCustomSubmit() {
           </template>
           <div class="page-sidebar-popover">
             <ProfileSelector />
-            <ModelSelector />
+            <ModelSelector @modal-show-change="modelModalOpen = $event" />
             <div class="page-sidebar-popover-row">
               <div
                 class="status-indicator"
