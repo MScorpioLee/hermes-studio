@@ -822,7 +822,7 @@ function handleBatchDeleteConfirm() {
     <div class="chat-main">
       <header class="chat-header">
         <div class="header-left">
-          <NButton quaternary size="small" @click="showSessions = !showSessions" circle>
+          <NButton class="history-sidebar-toggle" quaternary size="small" @click="showSessions = !showSessions" circle>
             <template #icon>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
             </template>
@@ -1118,7 +1118,7 @@ function handleBatchDeleteConfirm() {
     padding: 16px 12px 16px 52px;
   }
 
-  .header-left :deep(.n-icon-slot) {
+  .history-sidebar-toggle {
     display: none;
   }
 }
