@@ -254,13 +254,13 @@ function createWindow() {
   if (serverUrl) {
     mainWindow.loadURL(serverUrl)
   } else {
-    mainWindow.loadURL(splashHtml())
+    mainWindow.loadURL(splashHtml(t('runtime.checking')))
   }
   updateTrayMenu()
 }
 
-function splashHtml(): string {
-  const startingLabel = escapeHtml(t('desktop.startingLocalServices'))
+function splashHtml(label = t('desktop.startingLocalServices')): string {
+  const startingLabel = escapeHtml(label)
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Hermes Studio</title>
 <style>
   html,body{margin:0;height:100%;background:#1a1a1a;color:#e5e5e5;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;-webkit-app-region:drag;}
@@ -282,6 +282,10 @@ function splashHtml(): string {
 <div id="detail" class="detail"></div>
 </div></body></html>`
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(html)
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function escapeHtml(value: string): string {
@@ -433,6 +437,10 @@ async function bootstrap(source?: RuntimeDownloadSource) {
 
     if (shouldCheckRuntime) {
       if (!selectedSource && !runtimeUrlOverride && !manifestOverride) {
+        if (mainWindow) {
+          await mainWindow.loadURL(splashHtml(t('runtime.checking')))
+          await delay(350)
+        }
         if (mainWindow) await mainWindow.loadURL(runtimeSourceHtml())
         isBootstrapping = false
         return
@@ -458,6 +466,7 @@ async function bootstrap(source?: RuntimeDownloadSource) {
   }
 
   try {
+    updateSplash({ stage: 'resolve', message: t('desktop.startingLocalServices') })
     const url = await startWebUiServer(PORT)
     serverUrl = url
     if (mainWindow) await mainWindow.loadURL(url)
@@ -536,7 +545,7 @@ ipcMain.handle('hermes-desktop:retry-bootstrap', async (_event, source?: Runtime
     return
   }
   const selectedSource = source === 'cf' || source === 'github' ? source : undefined
-  await mainWindow?.loadURL(splashHtml())
+  await mainWindow?.loadURL(splashHtml(t('runtime.checking')))
   await bootstrap(selectedSource)
 })
 
