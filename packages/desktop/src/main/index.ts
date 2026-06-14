@@ -21,7 +21,6 @@ const PORT = Number(process.env.HERMES_DESKTOP_PORT) || 8748
 const START_HIDDEN = process.argv.includes('--hidden')
 const QUIT_EXISTING = process.argv.includes('--quit')
 const APP_USER_MODEL_ID = 'com.hermeswebui.studio'
-const RUNTIME_SOURCE_CHECK_VISIBLE_MS = 1000
 type WindowControlAction = 'minimize' | 'toggle-maximize' | 'close'
 
 let mainWindow: BrowserWindow | null = null
@@ -285,10 +284,6 @@ function splashHtml(label = t('desktop.startingLocalServices')): string {
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(html)
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, char => ({
     '&': '&amp;',
@@ -434,15 +429,10 @@ async function bootstrap(source?: RuntimeDownloadSource) {
     const forceUpdate = !!process.env.HERMES_DESKTOP_RUNTIME_FORCE_UPDATE
     const runtimeReady = isDesktopRuntimeReady()
     const packagedRuntimeUpdate = app.isPackaged && runtimeReady && cachedRuntimeNeedsPackagedReleaseUpdate()
-    const shouldCheckRuntime = !runtimeReady || forceUpdate || runtimeUrlOverride || manifestOverride || packagedRuntimeUpdate
+    const needsRuntimeWork = !runtimeReady || forceUpdate || runtimeUrlOverride || manifestOverride || packagedRuntimeUpdate
 
-    if (shouldCheckRuntime) {
+    if (needsRuntimeWork) {
       if (!selectedSource && !runtimeUrlOverride && !manifestOverride) {
-        if (mainWindow) {
-          await mainWindow.loadURL(splashHtml(t('runtime.checking')))
-          showWindowWithFade(true)
-          await delay(RUNTIME_SOURCE_CHECK_VISIBLE_MS)
-        }
         if (mainWindow) await mainWindow.loadURL(runtimeSourceHtml())
         isBootstrapping = false
         return
@@ -547,7 +537,7 @@ ipcMain.handle('hermes-desktop:retry-bootstrap', async (_event, source?: Runtime
     return
   }
   const selectedSource = source === 'cf' || source === 'github' ? source : undefined
-  await mainWindow?.loadURL(splashHtml(t('runtime.checking')))
+  await mainWindow?.loadURL(splashHtml(t('runtime.downloading')))
   await bootstrap(selectedSource)
 })
 
