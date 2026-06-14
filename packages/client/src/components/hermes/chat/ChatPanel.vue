@@ -58,6 +58,7 @@ const chatContentWrapperRef = ref<HTMLElement | null>(null);
 const showVersionManagement = ref(false);
 const showChangelog = ref(false);
 const showSettingsPopover = ref(false);
+const profileModalOpen = ref(false);
 const modelModalOpen = ref(false);
 const showToolPanel = ref(false);
 const activeToolPanel = ref<"files" | "terminal">("files");
@@ -733,7 +734,7 @@ function handleLogout() {
 }
 
 function handleSettingsPopoverShowChange(show: boolean) {
-  if (!show && modelModalOpen.value) return;
+  if (!show && (profileModalOpen.value || modelModalOpen.value)) return;
   showSettingsPopover.value = show;
 }
 
@@ -1197,7 +1198,7 @@ async function handleSessionModelCustomSubmit() {
             </button>
           </template>
           <div class="page-sidebar-popover">
-            <ProfileSelector />
+            <ProfileSelector @modal-show-change="profileModalOpen = $event" />
             <ModelSelector @modal-show-change="modelModalOpen = $event" />
             <div class="page-sidebar-popover-row">
               <div

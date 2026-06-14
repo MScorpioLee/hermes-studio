@@ -37,6 +37,7 @@ const showCompressionModal = ref(false)
 const showChangelog = ref(false)
 const showVersionManagement = ref(false)
 const showSettingsPopover = ref(false)
+const profileModalOpen = ref(false)
 const modelModalOpen = ref(false)
 const compressionConfig = ref({ triggerTokens: 100000, maxHistoryTokens: 32000, tailMessageCount: 10 })
 const isCompressing = ref(false)
@@ -128,7 +129,7 @@ function handleLogout() {
 }
 
 function handleSettingsPopoverShowChange(show: boolean) {
-    if (!show && modelModalOpen.value) return
+    if (!show && (profileModalOpen.value || modelModalOpen.value)) return
     showSettingsPopover.value = show
 }
 
@@ -456,7 +457,7 @@ async function handleApproval(choice: 'once' | 'session' | 'always' | 'deny') {
                         </button>
                     </template>
                     <div class="page-sidebar-popover">
-                        <ProfileSelector />
+                        <ProfileSelector @modal-show-change="profileModalOpen = $event" />
                         <ModelSelector @modal-show-change="modelModalOpen = $event" />
                         <div class="page-sidebar-popover-row">
                             <div
