@@ -11,7 +11,6 @@ import {
   cachedRuntimeNeedsPackagedReleaseUpdate,
   ensureDesktopRuntime,
   isDesktopRuntimeReady,
-  migrateLegacyDesktopRuntime,
   writeActiveRuntimeVersion,
   type RuntimeDownloadSource,
   type RuntimeProgress,
@@ -423,7 +422,6 @@ async function bootstrap(source?: RuntimeDownloadSource) {
 
   try {
     const selectedSource = source || envRuntimeDownloadSource()
-    migrateLegacyDesktopRuntime(updateSplash)
     const runtimeUrlOverride = !!process.env.HERMES_DESKTOP_RUNTIME_URL?.trim()
     const manifestOverride = !!process.env.HERMES_DESKTOP_RUNTIME_MANIFEST_URL?.trim()
     const forceUpdate = !!process.env.HERMES_DESKTOP_RUNTIME_FORCE_UPDATE
@@ -437,7 +435,7 @@ async function bootstrap(source?: RuntimeDownloadSource) {
         isBootstrapping = false
         return
       }
-      await ensureDesktopRuntime(updateSplash, selectedSource, true)
+      await ensureDesktopRuntime(updateSplash, selectedSource)
     }
     if (isDesktopRuntimeReady()) {
       writeActiveRuntimeVersion()

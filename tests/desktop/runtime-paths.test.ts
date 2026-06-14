@@ -46,6 +46,24 @@ function createRuntime(root: string, version: string) {
   }))
 }
 
+function createRuntimeWithoutManifest(root: string) {
+  if (process.platform === 'win32') {
+    mkdirSync(join(root, 'python', 'Scripts'), { recursive: true })
+    mkdirSync(join(root, 'node'), { recursive: true })
+    mkdirSync(join(root, 'git', 'cmd'), { recursive: true })
+    writeFileSync(join(root, 'python', 'python.exe'), '')
+    writeFileSync(join(root, 'python', 'Scripts', 'hermes.exe'), '')
+    writeFileSync(join(root, 'node', 'node.exe'), '')
+    writeFileSync(join(root, 'git', 'cmd', 'git.exe'), '')
+  } else {
+    mkdirSync(join(root, 'python', 'bin'), { recursive: true })
+    mkdirSync(join(root, 'node', 'bin'), { recursive: true })
+    writeFileSync(join(root, 'python', 'bin', 'python3'), '')
+    writeFileSync(join(root, 'python', 'bin', 'hermes'), '')
+    writeFileSync(join(root, 'node', 'bin', 'node'), '')
+  }
+}
+
 describe('desktop runtime paths', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -167,5 +185,19 @@ describe('desktop runtime paths', () => {
     const { desktopRuntimeDir } = await import('../../packages/desktop/src/main/paths')
 
     expect(desktopRuntimeDir()).toBe(runtime016)
+  })
+
+  it('uses installed runtime directories under desktop-runtime/hermes when executable files are present', async () => {
+    const homeDir = tempDir()
+    process.env.HERMES_WEB_UI_HOME = homeDir
+
+    const { runtimePlatformKey } = await import('../../packages/desktop/src/main/runtime-paths')
+    const runtimeDir = join(homeDir, 'desktop-runtime', 'hermes', '0.15.2', runtimePlatformKey())
+    createRuntimeWithoutManifest(runtimeDir)
+
+    const { desktopRuntimeDir, targetDesktopRuntimeDir } = await import('../../packages/desktop/src/main/paths')
+
+    expect(desktopRuntimeDir()).toBe(runtimeDir)
+    expect(targetDesktopRuntimeDir()).toBe(runtimeDir)
   })
 })
