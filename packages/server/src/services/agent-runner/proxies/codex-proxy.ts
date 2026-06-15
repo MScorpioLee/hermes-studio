@@ -259,7 +259,10 @@ async function openAiChatToResponsesSseStream(target: CodexProxyTarget, body: an
     apiKey: target.apiKey,
     body: chatBody,
   })
-  return responsesEventStream(observableResponsesEvents(target, openAiChatSseToResponsesEvents(stream, target)))
+  return responsesEventStream(observableResponsesEvents(target, openAiChatSseToResponsesEvents(stream, {
+    ...target,
+    annotateMcpToolNamespaces: true,
+  })))
 }
 
 async function anthropicMessagesToResponsesSseStream(target: CodexProxyTarget, body: any): Promise<Readable> {
@@ -280,7 +283,10 @@ async function anthropicMessagesToResponsesSseStream(target: CodexProxyTarget, b
     },
     body: anthropicBody,
   })
-  return responsesEventStream(observableResponsesEvents(target, anthropicMessagesSseToResponsesEvents(stream, target)))
+  return responsesEventStream(observableResponsesEvents(target, anthropicMessagesSseToResponsesEvents(stream, {
+    ...target,
+    annotateMcpToolNamespaces: true,
+  })))
 }
 
 async function openAiResponsesSseStream(target: CodexProxyTarget, body: any): Promise<Readable> {

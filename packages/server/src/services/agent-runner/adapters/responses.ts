@@ -2,6 +2,239 @@ export interface ResponsesAdapterTarget {
   model: string
 }
 
+const HERMES_STUDIO_NAMESPACE = 'mcp__hermes_studio'
+
+const HERMES_STUDIO_MCP_TOOLS = [
+  {
+    name: 'hermes_lan_devices_list',
+    description: 'List known LAN and remote devices from Hermes Web UI, including pairing and online status.',
+    inputSchema: inputSchema(),
+  },
+  {
+    name: 'hermes_lan_devices_scan',
+    description: 'Refresh LAN device discovery cache and return known devices with pairing and online status.',
+    inputSchema: inputSchema(),
+  },
+  {
+    name: 'hermes_lan_peer_connect',
+    description: 'Connect to a paired LAN device by device id.',
+    inputSchema: inputSchema({ device_id: { type: 'string' } }, ['device_id']),
+  },
+  {
+    name: 'hermes_lan_peer_connections',
+    description: 'List active LAN peer socket connections.',
+    inputSchema: inputSchema(),
+  },
+  {
+    name: 'hermes_lan_peer_disconnect',
+    description: 'Disconnect an active LAN peer socket connection.',
+    inputSchema: inputSchema({ connection_id: { type: 'string' } }, ['connection_id']),
+  },
+  {
+    name: 'hermes_lan_terminal_create',
+    description: 'Create an interactive terminal on a connected LAN peer.',
+    inputSchema: inputSchema({
+      connection_id: { type: 'string' },
+      shell: { type: 'string' },
+      cols: { type: 'number' },
+      rows: { type: 'number' },
+    }, ['connection_id']),
+  },
+  {
+    name: 'hermes_lan_terminal_list',
+    description: 'List interactive terminals tracked for a connected LAN peer, including IDs that can be read or closed.',
+    inputSchema: inputSchema({ connection_id: { type: 'string' } }, ['connection_id']),
+  },
+  {
+    name: 'hermes_lan_terminal_input',
+    description: 'Write input to an interactive terminal on a connected LAN peer.',
+    inputSchema: inputSchema({
+      connection_id: { type: 'string' },
+      terminal_id: { type: 'string' },
+      data: { type: 'string' },
+    }, ['connection_id', 'terminal_id', 'data']),
+  },
+  {
+    name: 'hermes_lan_terminal_read',
+    description: 'Read buffered terminal output from an interactive terminal.',
+    inputSchema: inputSchema({
+      connection_id: { type: 'string' },
+      terminal_id: { type: 'string' },
+    }, ['connection_id', 'terminal_id']),
+  },
+  {
+    name: 'hermes_lan_terminal_resize',
+    description: 'Resize an interactive terminal on a connected LAN peer.',
+    inputSchema: inputSchema({
+      connection_id: { type: 'string' },
+      terminal_id: { type: 'string' },
+      cols: { type: 'number' },
+      rows: { type: 'number' },
+    }, ['connection_id', 'terminal_id', 'cols', 'rows']),
+  },
+  {
+    name: 'hermes_lan_terminal_close',
+    description: 'Close an interactive terminal on a connected LAN peer.',
+    inputSchema: inputSchema({
+      connection_id: { type: 'string' },
+      terminal_id: { type: 'string' },
+    }, ['connection_id', 'terminal_id']),
+  },
+  {
+    name: 'hermes_lan_command_exec',
+    description: 'Run a command on a connected LAN peer using command plus args, without shell string execution.',
+    inputSchema: inputSchema({
+      connection_id: { type: 'string' },
+      command: { type: 'string' },
+      args: { type: 'array', items: { type: 'string' } },
+      cwd: { type: 'string' },
+      timeout_ms: { type: 'number' },
+    }, ['connection_id', 'command']),
+  },
+  {
+    name: 'hermes_lan_file_download',
+    description: 'Download a file from a connected LAN peer remote path to a local path on this machine.',
+    inputSchema: inputSchema({
+      connection_id: { type: 'string' },
+      remote_path: { type: 'string' },
+      local_path: { type: 'string' },
+      timeout_ms: { type: 'number' },
+    }, ['connection_id', 'remote_path', 'local_path']),
+  },
+  {
+    name: 'hermes_lan_file_upload',
+    description: 'Upload a local file path from this machine to a connected LAN peer remote path.',
+    inputSchema: inputSchema({
+      connection_id: { type: 'string' },
+      local_path: { type: 'string' },
+      remote_path: { type: 'string' },
+      timeout_ms: { type: 'number' },
+    }, ['connection_id', 'local_path', 'remote_path']),
+  },
+]
+
+const HERMES_STUDIO_MCP_TOOL_NAMES = new Set(HERMES_STUDIO_MCP_TOOLS.map(tool => tool.name))
+
+function inputSchema(properties: Record<string, unknown> = {}, required: string[] = []) {
+  return {
+    type: 'object',
+    properties: {
+      token: {
+        type: 'string',
+        description: 'Optional Hermes Web UI bearer token. Use the current model run token when one is provided in the run instructions.',
+      },
+      profile: {
+        type: 'string',
+        description: 'Optional Hermes profile name for profile-scoped Web UI requests.',
+      },
+      ...properties,
+    },
+    ...(required.length ? { required } : {}),
+    additionalProperties: false,
+  }
+}
+
+function normalizedNamespaceName(value: unknown): string {
+  return String(value || '').trim().replace(/-/g, '_')
+}
+
+function expandedResponseTools(tools: unknown): any[] {
+  if (!Array.isArray(tools)) return []
+  const mapped: any[] = []
+  const seen = new Set<string>()
+  const addFunctionTool = (tool: any) => {
+    const name = String(tool?.name || '').trim()
+    if (!name || seen.has(name)) return
+    seen.add(name)
+    mapped.push({
+      type: 'function',
+      name,
+      description: String(tool?.description || ''),
+      parameters: tool?.parameters || tool?.inputSchema || { type: 'object', properties: {} },
+      ...(tool?.namespace ? { namespace: tool.namespace } : {}),
+    })
+  }
+  for (const tool of tools) {
+    if (tool?.type === 'function') {
+      addFunctionTool(tool)
+      continue
+    }
+    if (tool?.type === 'namespace' && normalizedNamespaceName(tool?.name) === HERMES_STUDIO_NAMESPACE) {
+      for (const mcpTool of HERMES_STUDIO_MCP_TOOLS) {
+        addFunctionTool({
+          type: 'function',
+          name: mcpTool.name,
+          description: `${mcpTool.description} MCP namespace: ${HERMES_STUDIO_NAMESPACE}.`,
+          parameters: mcpTool.inputSchema,
+          namespace: HERMES_STUDIO_NAMESPACE,
+        })
+      }
+      continue
+    }
+    if (tool?.type === 'namespace') {
+      const namespace = normalizedNamespaceName(tool?.name)
+      if (namespace.startsWith('mcp__')) {
+        addFunctionTool({
+          type: 'function',
+          name: namespace,
+          description: `${String(tool?.description || `Tools in the ${namespace} MCP namespace.`)} Call a tool in this MCP namespace by passing the tool name and its JSON arguments.`,
+          parameters: {
+            type: 'object',
+            properties: {
+              tool: {
+                type: 'string',
+                description: 'Name of the MCP tool to call inside this namespace.',
+              },
+              arguments: {
+                type: 'object',
+                description: 'JSON arguments for the MCP tool.',
+                additionalProperties: true,
+              },
+            },
+            required: ['tool', 'arguments'],
+            additionalProperties: false,
+          },
+          namespace,
+        })
+      }
+    }
+  }
+  return mapped
+}
+
+export function responseToolNamespaceForName(name: unknown): string | undefined {
+  return HERMES_STUDIO_MCP_TOOL_NAMES.has(String(name || '')) ? HERMES_STUDIO_NAMESPACE : undefined
+}
+
+export function normalizeResponseFunctionCall(name: unknown, argumentsValue: unknown): { name: string; arguments: string; namespace?: string } {
+  const rawName = String(name || 'tool')
+  const rawArguments = String(argumentsValue || '{}')
+  const namespace = normalizedNamespaceName(rawName)
+  if (namespace.startsWith('mcp__')) {
+    const parsed = safeJsonParse(rawArguments)
+    const toolName = String(parsed?.tool || parsed?.name || '').trim()
+    if (toolName) {
+      const toolArguments = parsed?.arguments && typeof parsed.arguments === 'object'
+        ? parsed.arguments
+        : parsed?.input && typeof parsed.input === 'object'
+          ? parsed.input
+          : {}
+      return {
+        name: toolName,
+        arguments: JSON.stringify(toolArguments),
+        namespace,
+      }
+    }
+  }
+
+  const knownNamespace = responseToolNamespaceForName(rawName)
+  return {
+    name: rawName,
+    arguments: rawArguments,
+    ...(knownNamespace ? { namespace: knownNamespace } : {}),
+  }
+}
+
 export function stringifyContent(value: unknown): string {
   if (typeof value === 'string') return value
   if (Array.isArray(value)) {
@@ -118,8 +351,7 @@ function responsesInputToChatMessages(body: any): any[] {
 }
 
 function responsesToolsToChatTools(tools: unknown): any[] | undefined {
-  if (!Array.isArray(tools)) return undefined
-  const mapped = tools.map((tool: any) => {
+  const mapped = expandedResponseTools(tools).map((tool: any) => {
     if (tool?.type !== 'function') return null
     return {
       type: 'function',
@@ -205,8 +437,7 @@ function responsesInputToAnthropicMessages(body: any): any[] {
 }
 
 function responsesToolsToAnthropicTools(tools: unknown): any[] | undefined {
-  if (!Array.isArray(tools)) return undefined
-  const mapped = tools.map((tool: any) => {
+  const mapped = expandedResponseTools(tools).map((tool: any) => {
     if (tool?.type !== 'function') return null
     return {
       name: String(tool.name || ''),
@@ -277,12 +508,12 @@ export function openAiChatToResponses(data: any, target: ResponsesAdapterTarget)
   }
 
   for (const call of Array.isArray(message.tool_calls) ? message.tool_calls : []) {
+    const normalizedCall = normalizeResponseFunctionCall(call.function?.name || 'tool', call.function?.arguments || '{}')
     output.push({
       type: 'function_call',
       id: String(call.id || `fc_${output.length}`),
       call_id: String(call.id || `call_${output.length}`),
-      name: String(call.function?.name || 'tool'),
-      arguments: String(call.function?.arguments || '{}'),
+      ...normalizedCall,
     })
   }
 
@@ -306,12 +537,12 @@ export function anthropicMessageToResponses(data: any, target: ResponsesAdapterT
     if (block?.type === 'thinking' && block.thinking) reasoningParts.push(String(block.thinking))
     if (block?.type === 'redacted_thinking') reasoningParts.push('[redacted thinking]')
     if (block?.type === 'tool_use') {
+      const normalizedCall = normalizeResponseFunctionCall(block.name || 'tool', JSON.stringify(block.input || {}))
       output.push({
         type: 'function_call',
         id: String(block.id || `fc_${output.length}`),
         call_id: String(block.id || `call_${output.length}`),
-        name: String(block.name || 'tool'),
-        arguments: JSON.stringify(block.input || {}),
+        ...normalizedCall,
       })
     }
   }
