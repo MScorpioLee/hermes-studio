@@ -23,6 +23,7 @@ import {
 } from '../adapters/responses-stream'
 import { agentRunGateway } from '../gateway'
 import { codingAgentRunManager } from '../coding-agent-run-manager'
+import { logger } from '../../logger'
 
 export interface CodexProxyTargetInput extends AgentTargetInput {
   profile: string
@@ -100,7 +101,7 @@ function summarizeMessages(messages: any[]): any[] {
 }
 
 function logCodexChatRequest(target: CodexProxyTarget, body: any) {
-  console.log(JSON.stringify({
+  logger.info({
     event: 'codex_proxy_chat_request',
     provider: target.provider,
     model: target.model,
@@ -117,7 +118,7 @@ function logCodexChatRequest(target: CodexProxyTarget, body: any) {
           parameters: tool?.function?.parameters,
         }))
       : [],
-  }, null, 2))
+  }, '[codex-proxy] chat request')
 }
 
 function anthropicMessagesUrl(target: CodexProxyTarget): string {
