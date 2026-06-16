@@ -136,6 +136,7 @@ describe('getCompatibleCustomProviders', () => {
     const result = getCompatibleCustomProviders(config)
     expect(result).toHaveLength(1)
     expect(result[0].name).toBe('volc')
+    expect(result[0].source).toBe('custom_providers')
     expect(result[0].model).toBe('minimax-m3')
   })
 
@@ -154,6 +155,7 @@ describe('getCompatibleCustomProviders', () => {
     const result = getCompatibleCustomProviders(config)
     expect(result).toHaveLength(1)
     expect(result[0].name).toBe('volcengine-coding')
+    expect(result[0].source).toBe('providers')
     expect(result[0].provider_key).toBe('volcengine-coding')
     expect(result[0].base_url).toBe('https://ark.cn-beijing.volces.com/api/coding/v3')
     expect(result[0].key_env).toBe('ARK_CODING_API_KEY')

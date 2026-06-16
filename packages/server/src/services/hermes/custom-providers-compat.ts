@@ -40,6 +40,7 @@ const CAMEL_ALIASES: Record<string, string> = {
 export interface NormalizedCustomProvider {
   name: string
   base_url: string
+  source: 'custom_providers' | 'providers'
   provider_key?: string
   api_key?: string
   key_env?: string
@@ -70,6 +71,7 @@ function looksLikeUrl(value: string): boolean {
 export function normalizeCustomProviderEntry(
   entry: any,
   providerKey: string = '',
+  source: 'custom_providers' | 'providers' = providerKey ? 'providers' : 'custom_providers',
 ): NormalizedCustomProvider | null {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
 
@@ -111,7 +113,7 @@ export function normalizeCustomProviderEntry(
   }
   if (!name) return null
 
-  const normalized: NormalizedCustomProvider = { name, base_url: baseUrl }
+  const normalized: NormalizedCustomProvider = { name, base_url: baseUrl, source }
 
   if (providerKey && providerKey.trim()) {
     normalized.provider_key = providerKey.trim()
@@ -215,14 +217,14 @@ export function getCompatibleCustomProviders(config: any): NormalizedCustomProvi
   if (legacy !== undefined) {
     if (!Array.isArray(legacy)) return [] // matches Agent: malformed legacy block bails out entirely
     for (const entry of legacy) {
-      appendIfNew(normalizeCustomProviderEntry(entry))
+      appendIfNew(normalizeCustomProviderEntry(entry, '', 'custom_providers'))
     }
   }
 
   const dict = config.providers
   if (dict && typeof dict === 'object' && !Array.isArray(dict)) {
     for (const [key, entry] of Object.entries(dict)) {
-      appendIfNew(normalizeCustomProviderEntry(entry, key))
+      appendIfNew(normalizeCustomProviderEntry(entry, key, 'providers'))
     }
   }
 
