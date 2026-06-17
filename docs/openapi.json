@@ -8569,6 +8569,42 @@
         ]
       }
     },
+    "/api/hermes/sessions/count": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Get count",
+        "description": "GET /api/hermes/sessions/count",
+        "operationId": "count",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/api/hermes/sessions/hermes": {
       "get": {
         "tags": [

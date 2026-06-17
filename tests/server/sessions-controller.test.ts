@@ -389,6 +389,30 @@ describe('session conversations controller', () => {
     expect(ctx.body.sessions).toEqual([expect.objectContaining({ id: 'global-1', source: 'global_agent' })])
   })
 
+  it('counts account-accessible single-chat sessions with the same filters as the list endpoint', async () => {
+    listUserProfilesMock.mockReturnValue([{ profile_name: 'default' }, { profile_name: 'travel' }])
+    localListSessionsMock.mockReturnValue([
+      { id: 'default-session', profile: 'default', source: 'cli' },
+      { id: 'travel-session', profile: 'travel', source: 'coding_agent' },
+      { id: 'secret-session', profile: 'secret', source: 'cli' },
+      { id: 'api-session', profile: 'default', source: 'api_server' },
+      { id: 'global-session', profile: 'default', source: 'global_agent' },
+    ])
+
+    const mod = await import('../../packages/server/src/controllers/hermes/sessions')
+    const ctx: any = {
+      query: {},
+      state: {
+        user: { id: 1, role: 'admin' },
+      },
+      body: null,
+    }
+    await mod.count(ctx)
+
+    expect(localListSessionsMock).toHaveBeenCalledWith(undefined, undefined, 1000000)
+    expect(ctx.body).toEqual({ count: 4 })
+  })
+
   it('marks Hermes history sessions that already exist in the Web UI store', async () => {
     localListSessionsMock.mockReturnValue([{ id: 'cli-1', profile: 'travel' }])
     listSessionSummariesMock.mockResolvedValue([

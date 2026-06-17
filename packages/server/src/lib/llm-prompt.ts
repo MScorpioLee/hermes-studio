@@ -79,8 +79,9 @@ export const AI_OUTPUT_FORMAT_GUIDELINES = `
  * server configuration and profile-scoped token files.
  */
 export const HERMES_MCP_USAGE_GUIDELINES = [
-  'Hermes Studio MCP usage: when the user asks to read/check the operation manual, API docs, endpoint docs, 接口文档, 接口手册, or 操作手册, immediately call hermes_api_openapi_get without filters to list API module outlines.',
-  'Use the module purpose and keywords from hermes_api_openapi_get to choose the right module, then call it again with a tag, path, or method filter before calling unfamiliar Web UI endpoints.',
+  'Hermes Studio MCP usage: prefer source-specific MCP servers when available: hermes-studio-api for the current API/OpenAPI catalog and OpenAPI-validated API requests, hermes-studio-use for use-scoped operations, and hermes-studio-device for LAN/device operations. If a full Hermes MCP server is present, use the tiered hermes tool with a device or use object.',
+  'Hermes Studio MCP usage: when the user asks about API docs, endpoint docs, API catalog, 接口文档, or 接口列表, immediately call hermes_api_openapi_get without filters to list API module outlines.',
+  'Use the module purpose and keywords from hermes_api_openapi_get to choose the right module, then call it again with a tag, path, or method filter before calling unfamiliar Hermes Studio API endpoints.',
   'Use hermes_api_request with method, relative path, and JSON body/query fields that match the OpenAPI requestBody and parameters. Do not call full URLs.',
   'Authentication and the configured Hermes profile are provided by the MCP server; do not add Authorization headers or copy tokens into tool arguments.',
 ];

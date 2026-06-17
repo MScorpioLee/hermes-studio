@@ -19,7 +19,7 @@ const CODING_AGENT_TOOL_OUTPUT_STORAGE_LIMIT = 32 * 1024
 const CODING_AGENT_TOOL_OUTPUT_HEAD_CHARS = 24 * 1024
 const CODING_AGENT_TOOL_OUTPUT_TAIL_CHARS = 8 * 1024
 const CODEX_REASONING_SUMMARY_ARGS = ['-c', 'model_reasoning_summary="auto"']
-const HERMES_MCP_SERVER_NAME = 'hermes-studio'
+const HERMES_MCP_SERVER_NAMES = ['hermes-studio-api', 'hermes-studio-use', 'hermes-studio-device', 'hermes-studio']
 
 let pty: any = null
 
@@ -201,7 +201,7 @@ function hasManagedHermesMcpConfig(run: ManagedCodingAgentRun): boolean {
   if (!codexHome) return false
   try {
     const config = readFileSync(join(codexHome, 'config.toml'), 'utf-8')
-    return config.includes(`[mcp_servers.${HERMES_MCP_SERVER_NAME}]`)
+    return HERMES_MCP_SERVER_NAMES.some(serverName => config.includes(`[mcp_servers.${serverName}]`))
   } catch {
     return false
   }

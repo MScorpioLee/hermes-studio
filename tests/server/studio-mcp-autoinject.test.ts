@@ -52,20 +52,32 @@ describe('studio MCP autoinject', () => {
     expect(result.targets.map(target => target.profile)).toEqual(['default', 'work'])
     expect(updateConfigYamlForProfileMock).toHaveBeenCalledTimes(2)
     const injectedDefault = await updateConfigYamlForProfileMock.mock.calls[0][1]({})
-    expect(injectedDefault.data.mcp_servers['hermes-studio']).toEqual({
+    expect(Object.keys(injectedDefault.data.mcp_servers).sort()).toEqual(['hermes-studio-api', 'hermes-studio-device', 'hermes-studio-use'])
+    expect(injectedDefault.data.mcp_servers['hermes-studio-api']).toEqual({
       command: process.execPath,
-      args: [join(process.cwd(), 'bin/hermes-web-ui-mcp.mjs')],
+      args: [join(process.cwd(), 'bin/hermes-studio-mcp.mjs')],
       env: {
         HERMES_WEB_UI_URL: 'http://127.0.0.1:8648',
         HERMES_WEB_UI_HOME: '/Users/test/.hermes-web-ui',
         HERMES_WEBUI_STATE_DIR: '/Users/test/.hermes-web-ui',
         HERMES_WEB_UI_PROFILE: 'default',
+        HERMES_MCP_SERVER_NAME: 'hermes-studio-api',
+        HERMES_MCP_TOOLSET: 'api',
         HERMES_WEB_UI_MANAGED_MCP: '1',
       },
       enabled: true,
     })
+    expect(injectedDefault.data.mcp_servers['hermes-studio-use'].env).toMatchObject({
+      HERMES_MCP_SERVER_NAME: 'hermes-studio-use',
+      HERMES_MCP_TOOLSET: 'use',
+    })
+    expect(injectedDefault.data.mcp_servers['hermes-studio-device'].env).toMatchObject({
+      HERMES_MCP_SERVER_NAME: 'hermes-studio-device',
+      HERMES_MCP_TOOLSET: 'device',
+    })
     const injectedWork = await updateConfigYamlForProfileMock.mock.calls[1][1]({})
-    expect(injectedWork.data.mcp_servers['hermes-studio'].env.HERMES_WEB_UI_PROFILE).toBe('work')
+    expect(injectedWork.data.mcp_servers['hermes-studio-api'].env.HERMES_WEB_UI_PROFILE).toBe('work')
+    expect(result.serverNames).toEqual(['hermes-studio-api', 'hermes-studio-use', 'hermes-studio-device'])
     expect(result.command).toBe(process.execPath)
   })
 
@@ -98,7 +110,7 @@ describe('studio MCP autoinject', () => {
       mcp_servers: {
         'hermes-studio': {
           command: process.execPath,
-          args: [join(process.cwd(), 'bin/hermes-web-ui-mcp.mjs')],
+          args: [join(process.cwd(), 'bin/hermes-studio-mcp.mjs')],
           env: {
             HERMES_WEB_UI_URL: 'http://127.0.0.1:8648',
             HERMES_WEB_UI_HOME: '/Users/test/.hermes-web-ui',
@@ -127,7 +139,7 @@ describe('studio MCP autoinject', () => {
     const updated = await updateConfigYamlForProfileMock.mock.calls[0][1]({
       mcp_servers: {
         'hermes-studio': {
-          command: 'hermes-web-ui-mcp',
+          command: 'hermes-studio-mcp',
           env: {
             HERMES_WEB_UI_URL: 'http://127.0.0.1:8648',
             HERMES_WEB_UI_HOME: '/tmp/hermes-web-ui-home',
@@ -140,8 +152,9 @@ describe('studio MCP autoinject', () => {
       },
     })
     expect(updated.result.status).toBe('updated')
-    expect(updated.data.mcp_servers['hermes-studio'].command).toBe(process.execPath)
-    expect(updated.data.mcp_servers['hermes-studio'].args).toEqual([join(process.cwd(), 'bin/hermes-web-ui-mcp.mjs')])
+    expect(updated.data.mcp_servers['hermes-studio']).toBeUndefined()
+    expect(updated.data.mcp_servers['hermes-studio-api'].command).toBe(process.execPath)
+    expect(updated.data.mcp_servers['hermes-studio-api'].args).toEqual([join(process.cwd(), 'bin/hermes-studio-mcp.mjs')])
   })
 
   it('uses the desktop command in desktop runtime', async () => {
@@ -151,7 +164,7 @@ describe('studio MCP autoinject', () => {
     await injectBundledMcpServer()
 
     const injected = await updateConfigYamlForProfileMock.mock.calls[0][1]({})
-    expect(injected.data.mcp_servers['hermes-studio'].command).toBe('hermes-studio-mcp')
+    expect(injected.data.mcp_servers['hermes-studio-api'].command).toBe('hermes-studio-mcp')
   })
 
   it('removes stale injected tokens from managed server config', async () => {
@@ -162,7 +175,7 @@ describe('studio MCP autoinject', () => {
     const updated = await updateConfigYamlForProfileMock.mock.calls[0][1]({
       mcp_servers: {
         'hermes-studio': {
-          command: 'hermes-web-ui-mcp',
+          command: 'hermes-studio-mcp',
           env: {
             HERMES_WEB_UI_URL: 'http://127.0.0.1:8648',
             HERMES_WEB_UI_HOME: '/tmp/hermes-web-ui-home',
@@ -176,10 +189,11 @@ describe('studio MCP autoinject', () => {
       },
     })
     expect(updated.result.status).toBe('updated')
-    expect(updated.data.mcp_servers['hermes-studio'].env.HERMES_WEB_UI_TOKEN).toBeUndefined()
+    expect(updated.data.mcp_servers['hermes-studio']).toBeUndefined()
+    expect(updated.data.mcp_servers['hermes-studio-api'].env.HERMES_WEB_UI_TOKEN).toBeUndefined()
   })
 
-  it('skips an unmanaged existing server entry', async () => {
+  it('keeps an unmanaged legacy server entry while adding source-specific managed entries', async () => {
     const { injectBundledMcpServer } = await import('../../packages/server/src/services/hermes/studio-mcp-autoinject')
 
     await injectBundledMcpServer()
@@ -189,7 +203,10 @@ describe('studio MCP autoinject', () => {
         'hermes-studio': { command: 'custom-command' },
       },
     })
-    expect(updated.write).toBe(false)
-    expect(updated.result.status).toBe('skipped')
+    expect(updated.result.status).toBe('injected')
+    expect(updated.data.mcp_servers['hermes-studio']).toEqual({ command: 'custom-command' })
+    expect(updated.data.mcp_servers['hermes-studio-api'].env.HERMES_MCP_TOOLSET).toBe('api')
+    expect(updated.data.mcp_servers['hermes-studio-use'].env.HERMES_MCP_TOOLSET).toBe('use')
+    expect(updated.data.mcp_servers['hermes-studio-device'].env.HERMES_MCP_TOOLSET).toBe('device')
   })
 })

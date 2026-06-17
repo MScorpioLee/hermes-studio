@@ -146,7 +146,7 @@ describe('handleCodingAgentRun', () => {
     writeModelRunProfileTokenMock.mockResolvedValue(undefined)
     getSystemPromptMock.mockReturnValue([
       'system prompt',
-      'Hermes Studio MCP usage: call hermes_api_openapi_get before calling unfamiliar Web UI endpoints.',
+      'Hermes Studio MCP usage: call hermes_api_openapi_get before calling unfamiliar Hermes Studio API endpoints.',
       'Use hermes_api_request with method, relative path, and JSON body/query fields.',
     ].join('\n'))
 

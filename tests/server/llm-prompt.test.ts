@@ -6,6 +6,9 @@ describe('LLM prompt', () => {
     const prompt = getSystemPrompt('custom instructions')
 
     expect(prompt).toContain('custom instructions')
+    expect(prompt).toContain('hermes-studio-api')
+    expect(prompt).toContain('hermes-studio-device')
+    expect(prompt).toContain('hermes-studio-use')
     expect(prompt).toContain('hermes_api_openapi_get')
     expect(prompt).toContain('hermes_api_request')
     expect(prompt).toContain('OpenAPI requestBody')

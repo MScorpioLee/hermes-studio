@@ -26,6 +26,8 @@ import { readConfigYamlForProfile } from '../../services/config-helpers'
 import { codingAgentRunManager } from '../../services/agent-runner/coding-agent-run-manager'
 import { AgentBridgeClient, getAgentBridgeManager } from '../../services/hermes/agent-bridge'
 
+const SESSION_COUNT_QUERY_LIMIT = 1_000_000
+
 function getPendingDeletedSessionIds(): Set<string> {
   return getGroupChatServer()?.getStorage().getPendingDeletedSessionIds() || new Set<string>()
 }
@@ -106,6 +108,15 @@ function isVisibleWebUiSessionSource(source?: string | null): boolean {
 function isRequestedSessionSource(source: string | undefined, sessionSource?: string | null): boolean {
   if (source === 'global_agent') return sessionSource === 'global_agent'
   return isVisibleWebUiSessionSource(sessionSource)
+}
+
+function listVisibleSingleChatSessions(ctx: any, profile: string | undefined, source: string | undefined, limit: number) {
+  const allSessions = localListSessions(profile, source, limit)
+  const knownProfiles = profile ? null : new Set(listProfileNamesFromDisk())
+  return filterPendingDeletedSessions(filterByAllowedProfiles(ctx, allSessions).filter(s =>
+    isRequestedSessionSource(source, s.source) &&
+    (!knownProfiles || knownProfiles.has(s.profile || 'default')),
+  ))
 }
 
 function isHermesHistorySessionSource(source?: string | null): boolean {
@@ -366,13 +377,16 @@ export async function list(ctx: any) {
   const profile = explicitProfileFilter(ctx)
   const effectiveLimit = limit && limit > 0 ? limit : 2000
 
-  const allSessions = localListSessions(profile, source, effectiveLimit)
-  const knownProfiles = profile ? null : new Set(listProfileNamesFromDisk())
   ctx.body = {
-    sessions: filterPendingDeletedSessions(filterByAllowedProfiles(ctx, allSessions).filter(s =>
-      isRequestedSessionSource(source, s.source) &&
-      (!knownProfiles || knownProfiles.has(s.profile || 'default')),
-    )),
+    sessions: listVisibleSingleChatSessions(ctx, profile, source, effectiveLimit),
+  }
+}
+
+export async function count(ctx: any) {
+  const source = (ctx.query.source as string) || undefined
+  const profile = explicitProfileFilter(ctx)
+  ctx.body = {
+    count: listVisibleSingleChatSessions(ctx, profile, source, SESSION_COUNT_QUERY_LIMIT).length,
   }
 }
 

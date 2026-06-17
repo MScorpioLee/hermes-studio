@@ -204,17 +204,27 @@ describe('coding agent launch preparation', () => {
     expect(settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL).not.toBe('claude-sonnet-4-6')
 
     const mcp = JSON.parse(readFileSync(join(result.rootDir, 'mcp.json'), 'utf-8'))
-    expect(mcp.mcpServers['hermes-studio']).toMatchObject({
+    expect(Object.keys(mcp.mcpServers).sort()).toEqual(['hermes-studio-api', 'hermes-studio-device', 'hermes-studio-use'])
+    expect(mcp.mcpServers['hermes-studio-api']).toMatchObject({
       command: process.execPath,
-      args: [join(process.cwd(), 'bin/hermes-web-ui-mcp.mjs')],
+      args: [join(process.cwd(), 'bin/hermes-studio-mcp.mjs')],
       env: {
         HERMES_WEB_UI_URL: 'http://127.0.0.1:8648',
         HERMES_WEB_UI_HOME: home,
         HERMES_WEBUI_STATE_DIR: home,
         HERMES_WEB_UI_PROFILE: 'default',
-        HERMES_MCP_SERVER_NAME: 'hermes-studio-mcp',
+        HERMES_MCP_SERVER_NAME: 'hermes-studio-api',
+        HERMES_MCP_TOOLSET: 'api',
         HERMES_WEB_UI_MANAGED_MCP: '1',
       },
+    })
+    expect(mcp.mcpServers['hermes-studio-use'].env).toMatchObject({
+      HERMES_MCP_SERVER_NAME: 'hermes-studio-use',
+      HERMES_MCP_TOOLSET: 'use',
+    })
+    expect(mcp.mcpServers['hermes-studio-device'].env).toMatchObject({
+      HERMES_MCP_SERVER_NAME: 'hermes-studio-device',
+      HERMES_MCP_TOOLSET: 'device',
     })
 
     const prompt = readFileSync(join(result.rootDir, 'CLAUDE.md'), 'utf-8')
@@ -316,13 +326,20 @@ describe('coding agent launch preparation', () => {
     expect(config).toContain('requires_openai_auth = false')
     expect(config).toContain(`model_catalog_json = "${join(result.rootDir, 'codex-model-catalog.json')}"`)
     expect(config).toContain('model_reasoning_summary = "auto"')
-    expect(config).toContain('[mcp_servers.hermes-studio]')
+    expect(config).toContain('[mcp_servers.hermes-studio-api]')
+    expect(config).toContain('[mcp_servers.hermes-studio-use]')
+    expect(config).toContain('[mcp_servers.hermes-studio-device]')
     expect(config).toContain(`command = "${process.execPath}"`)
-    expect(config).toContain(`args = ["${join(process.cwd(), 'bin/hermes-web-ui-mcp.mjs')}"]`)
+    expect(config).toContain(`args = ["${join(process.cwd(), 'bin/hermes-studio-mcp.mjs')}"]`)
     expect(config).toContain(`env = { HERMES_WEB_UI_URL = "http://127.0.0.1:8648", HERMES_WEB_UI_HOME = "${home}"`)
     expect(config).toContain('HERMES_WEBUI_STATE_DIR = "')
     expect(config).toContain('HERMES_WEB_UI_PROFILE = "default"')
-    expect(config).toContain('HERMES_MCP_SERVER_NAME = "hermes-studio-mcp"')
+    expect(config).toContain('HERMES_MCP_SERVER_NAME = "hermes-studio-api"')
+    expect(config).toContain('HERMES_MCP_TOOLSET = "api"')
+    expect(config).toContain('HERMES_MCP_SERVER_NAME = "hermes-studio-use"')
+    expect(config).toContain('HERMES_MCP_TOOLSET = "use"')
+    expect(config).toContain('HERMES_MCP_SERVER_NAME = "hermes-studio-device"')
+    expect(config).toContain('HERMES_MCP_TOOLSET = "device"')
     expect(config).toContain('HERMES_WEB_UI_MANAGED_MCP = "1"')
 
     expect(result.files.some(file => file.key === 'agents')).toBe(false)
