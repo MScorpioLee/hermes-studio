@@ -12,6 +12,7 @@ import { useSettingsStore } from './settings'
 import { primeCompletionSound, playCompletionSound } from '@/utils/completion-sound'
 import { showCompletionNotification } from '@/utils/completion-notification'
 import { detectThinkingBoundary } from '@/utils/thinking-parser'
+import { isKnownBridgeSessionCommand } from '@/utils/hermes/bridge-session-commands'
 
 // Re-export ContentBlock for convenience
 export type ContentBlock = ContentBlockImport
@@ -1792,6 +1793,8 @@ export const useChatStore = defineStore('chat', () => {
 
     primeCompletionBellIfEnabled()
 
+    const trimmedContent = content.trim()
+
     if (!activeSession.value) {
       const session = createSession()
       switchSession(session.id)
@@ -1803,18 +1806,18 @@ export const useChatStore = defineStore('chat', () => {
       ? activeSession.value.messageCount == null || activeSession.value.messageCount === 0
       : false
     const isCodingAgentSession = isCodingAgentLikeSession(activeSession.value)
-    const isBridgeSlashCommand = !isCodingAgentSession && content.trim().startsWith('/')
-    const isBridgeCompressCommand = isBridgeSlashCommand && /^\/compress(?:\s|$)/i.test(content.trim())
-    const isBridgePlanCommand = isBridgeSlashCommand && /^\/plan(?:\s|$)/i.test(content.trim())
-    const isBridgeSkillCommand = isBridgeSlashCommand && /^\/skill(?:\s|$)/i.test(content.trim())
-    const isBridgeGoalCommand = isBridgeSlashCommand && /^\/goal(?:\s|$)/i.test(content.trim())
+    const isBridgeSlashCommand = !isCodingAgentSession && isKnownBridgeSessionCommand(trimmedContent)
+    const isBridgeCompressCommand = isBridgeSlashCommand && /^\/compress(?:\s|$)/i.test(trimmedContent)
+    const isBridgePlanCommand = isBridgeSlashCommand && /^\/plan(?:\s|$)/i.test(trimmedContent)
+    const isBridgeSkillCommand = isBridgeSlashCommand && /^\/skill(?:\s|$)/i.test(trimmedContent)
+    const isBridgeGoalCommand = isBridgeSlashCommand && /^\/goal(?:\s|$)/i.test(trimmedContent)
     const wasLiveBeforeSend = isSessionLive(sid)
     const shouldQueue = wasLiveBeforeSend && (!isBridgeSlashCommand || isBridgePlanCommand || isBridgeSkillCommand)
 
     const userMsg: Message = {
       id: uid(),
       role: isBridgeSlashCommand ? 'command' : 'user',
-      content: content.trim(),
+      content: trimmedContent,
       timestamp: Date.now(),
       attachments: attachments && attachments.length > 0 ? attachments : undefined,
       queued: shouldQueue,
@@ -1863,7 +1866,7 @@ export const useChatStore = defineStore('chat', () => {
         input = await buildContentBlocks(content, attachments, uploaded)
       } else {
         // No attachments: use plain text format
-        input = content.trim()
+        input = trimmedContent
       }
 
       const appStore = useAppStore()
