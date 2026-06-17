@@ -755,10 +755,14 @@ function bundledMcpScriptPath(): string | null {
   return candidateBundledMcpScripts().find(candidate => existsSync(candidate)) || null
 }
 
+function bundledMcpNodePath(): string {
+  return process.env.HERMES_WEB_UI_MCP_NODE?.trim() || process.env.HERMES_AGENT_NODE?.trim() || process.execPath
+}
+
 function hermesMcpCommandConfig(): { command: string; args?: string[] } {
-  if (isDesktopRuntime()) return { command: 'hermes-studio-mcp' }
   const script = bundledMcpScriptPath()
-  if (script) return { command: process.execPath, args: [script] }
+  if (script) return { command: bundledMcpNodePath(), args: [script] }
+  if (isDesktopRuntime()) return { command: 'hermes-studio-mcp' }
   return { command: 'hermes-web-ui-mcp' }
 }
 

@@ -28,6 +28,10 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.HERMES_WEB_UI_HOME
   delete process.env.HERMES_CODING_AGENT_GLOBAL_HOME
+  delete process.env.HERMES_DESKTOP
+  delete process.env.HERMES_WEB_UI_MCP_BIN
+  delete process.env.HERMES_WEB_UI_MCP_NODE
+  delete process.env.HERMES_AGENT_NODE
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true })
@@ -332,6 +336,31 @@ describe('coding agent launch preparation', () => {
     expect(catalog.models[0]).toHaveProperty('base_instructions')
     expect(catalog.models[0]).toHaveProperty('model_messages')
     expect(catalog.models[0]).toHaveProperty('default_reasoning_summary', 'auto')
+  })
+
+  it('uses explicit desktop MCP node and script paths for Codex instead of relying on PATH', async () => {
+    const home = makeHome()
+    const mcpScript = join(home, 'webui', 'bin', 'hermes-web-ui-mcp.mjs')
+    const mcpNode = join(home, 'runtime', 'node.exe')
+    mkdirSync(dirname(mcpScript), { recursive: true })
+    writeFileSync(mcpScript, '#!/usr/bin/env node\n')
+    process.env.HERMES_DESKTOP = 'true'
+    process.env.HERMES_WEB_UI_MCP_BIN = mcpScript
+    process.env.HERMES_WEB_UI_MCP_NODE = mcpNode
+
+    const result = await prepareCodingAgentLaunch('codex', {
+      profile: 'default',
+      provider: 'openrouter',
+      model: 'openai/gpt-oss-20b:free',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: 'sk-test',
+    })
+
+    const config = readFileSync(join(result.rootDir, 'config.toml'), 'utf-8')
+    expect(config).toContain('[mcp_servers.hermes-studio]')
+    expect(config).toContain(`command = "${mcpNode.replace(/\\/g, '\\\\')}"`)
+    expect(config).toContain(`args = ["${mcpScript.replace(/\\/g, '\\\\')}"]`)
+    expect(config).not.toContain('command = "hermes-studio-mcp"')
   })
 
   it('points Codex Chat Completions providers at the local Responses proxy', async () => {
