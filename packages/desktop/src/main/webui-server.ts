@@ -361,6 +361,8 @@ export async function startWebUiServer(port = DEFAULT_PORT): Promise<string> {
     HERMES_AGENT_ROOT: pythonDir(),
     HERMES_AGENT_NODE: bundledNode(),
     HERMES_AGENT_NODE_ROOT: isWin ? bundledNodeBin : dirname(bundledNodeBin),
+    HERMES_WEB_UI_MCP_NODE: bundledNode(),
+    HERMES_WEB_UI_MCP_BIN: join(webuiDir(), 'bin', 'hermes-web-ui-mcp.mjs'),
     AGENT_BROWSER_HOME: process.env.AGENT_BROWSER_HOME?.trim() || join(agentHome, 'agent-browser'),
     ...(browserExecutable ? { AGENT_BROWSER_EXECUTABLE_PATH: browserExecutable } : {}),
     PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH || join(pythonDir(), 'ms-playwright'),
