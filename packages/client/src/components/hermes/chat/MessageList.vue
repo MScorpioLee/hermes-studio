@@ -164,6 +164,21 @@ const displayMessagesWithForkDivider = computed<Message[]>(() => {
   ];
 });
 
+const canForkActiveSession = computed(() => {
+  const session = chatStore.activeSession;
+  const hasConversation = displayMessages.value.some((message) => message.role === "user" || message.role === "assistant");
+  return !!session && session.source !== "coding_agent" && !chatStore.isStreaming && !chatStore.isForkPending && hasConversation;
+});
+
+const lastForkActionMessageId = computed(() => {
+  const messages = displayMessagesWithForkDivider.value;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role === "user" || message.role === "assistant") return message.id;
+  }
+  return null;
+});
+
 const queuedMessages = computed(() => {
   const sid = chatStore.activeSessionId;
   if (!sid) return [];
@@ -506,6 +521,7 @@ defineExpose({
           v-else
           :message="msg"
           :highlight="chatStore.focusMessageId === msg.id"
+          :show-fork-action="canForkActiveSession && msg.id === lastForkActionMessageId"
         />
       </template>
       <template #after>

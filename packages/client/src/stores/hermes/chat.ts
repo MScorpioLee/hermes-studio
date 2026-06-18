@@ -1401,6 +1401,10 @@ export const useChatStore = defineStore('chat', () => {
     if ((evt as any).started === true && (evt as any).terminal === false) {
       serverWorking.value.add(sid)
     }
+    if ((evt as any).terminal === true) {
+      streamStates.value.delete(sid)
+      serverWorking.value.delete(sid)
+    }
 
     if (action === 'clear' && command === 'clear') {
       if (target) target.messages = []
@@ -1896,6 +1900,8 @@ export const useChatStore = defineStore('chat', () => {
     const isBridgePlanCommand = isBridgeSlashCommand && /^\/plan(?:\s|$)/i.test(trimmedContent)
     const isBridgeSkillCommand = isBridgeSlashCommand && /^\/skill(?:\s|$)/i.test(trimmedContent)
     const isBridgeGoalCommand = isBridgeSlashCommand && /^\/goal(?:\s|$)/i.test(trimmedContent)
+    const isBridgeForkCommand = isBridgeSlashCommand && /^\/fork(?:\s|$)/i.test(trimmedContent)
+    const shouldOptimisticallyShowRunStatus = !isCodingAgentSession && !isBridgeForkCommand
     const wasLiveBeforeSend = isSessionLive(sid)
     const shouldQueue = wasLiveBeforeSend && (!isBridgeSlashCommand || isBridgePlanCommand || isBridgeSkillCommand)
 
@@ -1914,7 +1920,7 @@ export const useChatStore = defineStore('chat', () => {
     } else {
       addMessage(sid, userMsg)
       updateSessionTitle(sid)
-      if (!isCodingAgentSession) serverWorking.value.add(sid)
+      if (shouldOptimisticallyShowRunStatus) serverWorking.value.add(sid)
     }
 
     let runSubmitted = false
