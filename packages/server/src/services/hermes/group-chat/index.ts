@@ -1104,6 +1104,7 @@ export class GroupChatServer {
                 senderName: savedMsg.senderName,
                 senderId: savedMsg.senderId,
                 timestamp: savedMsg.timestamp,
+                role: savedMsg.role,
                 mentionDepth,
                 senderKind: isAgentReply ? 'agent' : 'user',
             }).catch((err) => {
