@@ -39,10 +39,12 @@ interface MessageData {
 }
 
 type MentionMessage = {
+    messageId?: string
     content: string
     senderName: string
     senderId: string
     timestamp: number
+    role?: string
     input?: string | ContentBlock[]
     mentionDepth?: number
     senderKind: MentionSenderKind
@@ -64,7 +66,7 @@ export function mentionMessageToStoredContextMessage(roomId: string, msg: Mentio
         senderName: msg.senderName,
         content: msg.content,
         timestamp: msg.timestamp,
-        role: msg.senderKind === 'agent' ? 'assistant' : 'user',
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
     }
 }
 

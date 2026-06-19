@@ -1060,11 +1060,13 @@ export class GroupChatServer {
             // Agent replies are allowed to mention other agents, but mentionDepth
             // bounds chained agent-to-agent handoffs so one prompt cannot loop forever.
             this.agentClients.processMentions(roomId, {
+                messageId: savedMsg.id,
                 content: contentToText(savedMsg.content),
                 input: Array.isArray(data.content) ? data.content : undefined,
                 senderName: savedMsg.senderName,
                 senderId: savedMsg.senderId,
                 timestamp: savedMsg.timestamp,
+                role: savedMsg.role,
                 mentionDepth,
                 senderKind: isAgentReply ? 'agent' : 'user',
             }).catch((err) => {
