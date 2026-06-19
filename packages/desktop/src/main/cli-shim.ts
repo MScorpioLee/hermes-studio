@@ -32,8 +32,10 @@ interface CliShimInstallOptions {
   env?: NodeJS.ProcessEnv
   executablePath?: string
   homeDir?: string
+  nodePath?: string
   platform?: NodeJS.Platform
   runtimeVersion?: string
+  webUiScriptPath?: string
 }
 
 interface McpShimInstallOptions extends CliShimInstallOptions {
@@ -87,6 +89,8 @@ export function createShimContent(
   platform: NodeJS.Platform = process.platform,
   archName: string = process.arch,
   runtimeVersion = '0.15.2',
+  nodePath = process.execPath,
+  webUiScriptPath = resolve(process.cwd(), 'bin', 'hermes-web-ui.mjs'),
 ): string {
   if (platform === 'win32') {
     const runtimePlatform = windowsRuntimePlatformKey(archName)
@@ -94,6 +98,12 @@ export function createShimContent(
       '@echo off',
       `rem ${SHIM_MARKER}`,
       `set "APP=${executablePath}"`,
+      `set "NODE=${nodePath}"`,
+      `set "WEBUI_SCRIPT=${webUiScriptPath}"`,
+      'if "%~1"=="" goto openApp',
+      'if /I "%~1"=="help" goto help',
+      'if /I "%~1"=="-h" goto help',
+      'if /I "%~1"=="--help" goto help',
       'set "WEBUI_HOME=%HERMES_WEB_UI_HOME%"',
       'if "%WEBUI_HOME%"=="" set "WEBUI_HOME=%HERMES_WEBUI_STATE_DIR%"',
       'if "%WEBUI_HOME%"=="" set "WEBUI_HOME=%USERPROFILE%\\.hermes-web-ui"',
@@ -103,13 +113,45 @@ export function createShimContent(
       ')',
       `if "%RUNTIME%"=="" set "RUNTIME=%WEBUI_HOME%\\desktop-runtime\\hermes\\${runtimeVersion}\\${runtimePlatform}"`,
       'set "PYTHON=%RUNTIME%\\python\\python.exe"',
-      'if not exist "%PYTHON%" (',
-      '  echo Hermes Studio Python runtime not found at "%PYTHON%" 1>&2',
-      '  echo Open Hermes Studio once to finish runtime setup, then retry hermes-studio. 1>&2',
-      '  exit /b 127',
+      'if /I "%~1"=="cli" (',
+      '  if not exist "%PYTHON%" (',
+      '    echo Hermes Studio Python runtime not found at "%PYTHON%" 1>&2',
+      '    echo Open Hermes Studio once to finish runtime setup, then retry hermes-studio cli. 1>&2',
+      '    exit /b 127',
+      '  )',
+      '  shift',
+      '  "%PYTHON%" -m hermes_cli.main %*',
+      '  exit /b %ERRORLEVEL%',
       ')',
-      '"%PYTHON%" -m hermes_cli.main %*',
-      'exit /b %ERRORLEVEL%',
+      'if /I "%~1"=="web" (',
+      '  if not exist "%NODE%" (',
+      '    echo Hermes Studio Node runtime not found at "%NODE%" 1>&2',
+      '    echo Open Hermes Studio once to finish runtime setup, then retry hermes-studio web. 1>&2',
+      '    exit /b 127',
+      '  )',
+      '  if not exist "%WEBUI_SCRIPT%" (',
+      '    echo Hermes Web UI script not found at "%WEBUI_SCRIPT%" 1>&2',
+      '    exit /b 127',
+      '  )',
+      '  shift',
+      '  "%NODE%" "%WEBUI_SCRIPT%" %*',
+      '  exit /b %ERRORLEVEL%',
+      ')',
+      'echo Unknown Hermes Studio command: %~1 1>&2',
+      'echo Run hermes-studio --help for usage. 1>&2',
+      'exit /b 2',
+      ':openApp',
+      'start "" "%APP%"',
+      'exit /b 0',
+      ':help',
+      'echo Usage: hermes-studio [command] [options]',
+      'echo.',
+      'echo Commands:',
+      'echo   ^(no command^)       Open Hermes Studio desktop app',
+      'echo   cli [args...]       Run bundled Hermes Agent CLI',
+      'echo   web [args...]       Run bundled hermes-web-ui command',
+      'echo   help, -h, --help    Show this help message',
+      'exit /b 0',
       '',
     ].join('\r\n')
   }
@@ -118,12 +160,55 @@ export function createShimContent(
     '#!/bin/sh',
     `# ${SHIM_MARKER}`,
     `APP=${shellQuote(executablePath)}`,
+    `NODE=${shellQuote(nodePath)}`,
+    `WEBUI_SCRIPT=${shellQuote(webUiScriptPath)}`,
+    'show_help() {',
+    '  cat <<\'EOF\'',
+    'Usage: hermes-studio [command] [options]',
+    '',
+    'Commands:',
+    '  (no command)       Open Hermes Studio desktop app',
+    '  cli [args...]      Run bundled Hermes Agent CLI',
+    '  web [args...]      Run bundled hermes-web-ui command',
+    '  help, -h, --help   Show this help message',
+    'EOF',
+    '}',
     'if [ ! -x "$APP" ]; then',
     '  echo "Hermes Studio executable not found at $APP" >&2',
     '  exit 127',
     'fi',
     'unset ELECTRON_RUN_AS_NODE',
-    `exec "$APP" -- ${HERMES_CLI_ARG} "$@"`,
+    'case "${1:-}" in',
+    '  "")',
+    '    exec "$APP"',
+    '    ;;',
+    '  cli)',
+    '    shift',
+    `    exec "$APP" -- ${HERMES_CLI_ARG} "$@"`,
+    '    ;;',
+    '  web)',
+    '    shift',
+    '    if [ ! -x "$NODE" ]; then',
+    '      echo "Hermes Studio Node runtime not found at $NODE" >&2',
+    '      echo "Open Hermes Studio once to finish runtime setup, then retry hermes-studio web." >&2',
+    '      exit 127',
+    '    fi',
+    '    if [ ! -f "$WEBUI_SCRIPT" ]; then',
+    '      echo "Hermes Web UI script not found at $WEBUI_SCRIPT" >&2',
+    '      exit 127',
+    '    fi',
+    '    exec "$NODE" "$WEBUI_SCRIPT" "$@"',
+    '    ;;',
+    '  help|-h|--help)',
+    '    show_help',
+    '    exit 0',
+    '    ;;',
+    '  *)',
+    '    echo "Unknown Hermes Studio command: $1" >&2',
+    '    echo "Run hermes-studio --help for usage." >&2',
+    '    exit 2',
+    '    ;;',
+    'esac',
     '',
   ].join('\n')
 }
@@ -311,7 +396,14 @@ export async function installHermesStudioCliShim(options: CliShimInstallOptions 
   const shimPath = shimPathForPlatform(binDir, platform)
 
   mkdirSync(binDir, { recursive: true })
-  const status = writeShim(shimPath, createShimContent(executablePath, platform, process.arch, options.runtimeVersion), platform)
+  const status = writeShim(shimPath, createShimContent(
+    executablePath,
+    platform,
+    process.arch,
+    options.runtimeVersion,
+    options.nodePath,
+    options.webUiScriptPath,
+  ), platform)
   const pathUpdated = await ensureUserBinOnPath(homeDir, binDir, platform, env).catch((err) => {
     console.warn(`[cli-shim] failed to update PATH: ${err instanceof Error ? err.message : String(err)}`)
     return false

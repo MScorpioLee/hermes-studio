@@ -26,28 +26,53 @@ function tempHome(): string {
 }
 
 describe('Hermes Studio CLI shim', () => {
-  it('quotes Unix app paths and forwards args through --hermes-cli', () => {
-    const content = createShimContent("/Applications/Hermes Studio's.app/Contents/MacOS/Hermes Studio", 'darwin')
+  it('quotes Unix app paths and routes app, cli, web, and help commands', () => {
+    const content = createShimContent(
+      "/Applications/Hermes Studio's.app/Contents/MacOS/Hermes Studio",
+      'darwin',
+      'arm64',
+      '0.15.2',
+      '/runtime/node/bin/node',
+      '/resources/webui/bin/hermes-web-ui.mjs',
+    )
 
     expect(content).toContain("--hermes-cli")
     expect(content).toContain("APP='/Applications/Hermes Studio'\\''s.app/Contents/MacOS/Hermes Studio'")
+    expect(content).toContain("NODE='/runtime/node/bin/node'")
+    expect(content).toContain("WEBUI_SCRIPT='/resources/webui/bin/hermes-web-ui.mjs'")
     expect(content).toContain('unset ELECTRON_RUN_AS_NODE')
+    expect(content).toContain('case "${1:-}" in')
+    expect(content).toContain('exec "$APP"')
+    expect(content).toContain('shift')
     expect(content).toContain('exec "$APP" -- --hermes-cli "$@"')
+    expect(content).toContain('exec "$NODE" "$WEBUI_SCRIPT" "$@"')
+    expect(content).toContain('Usage: hermes-studio [command] [options]')
   })
 
-  it('runs the bundled Python Hermes CLI directly in Windows shims', () => {
+  it('routes Windows cli and web subcommands through bundled runtime paths', () => {
     const content = createShimContent(
       'C:\\Users\\Example\\AppData\\Local\\Programs\\Hermes Studio\\Hermes Studio.exe',
       'win32',
       'x64',
+      '0.15.2',
+      'C:\\runtime\\node\\node.exe',
+      'C:\\resources\\webui\\bin\\hermes-web-ui.mjs',
     )
 
     expect(content).toContain('desktop-runtime\\hermes\\0.15.2\\win-x64')
     expect(content).toContain('desktop-runtime\\active-version.json')
     expect(content).toContain("$j.platform -eq 'win-x64'")
     expect(content).toContain('[Console]::Out.Write($j.runtimeDirectory)')
+    expect(content).toContain('set "NODE=C:\\runtime\\node\\node.exe"')
+    expect(content).toContain('set "WEBUI_SCRIPT=C:\\resources\\webui\\bin\\hermes-web-ui.mjs"')
     expect(content).toContain('set "PYTHON=%RUNTIME%\\python\\python.exe"')
+    expect(content).toContain('if /I "%~1"=="cli" (')
+    expect(content).toContain('shift')
     expect(content).toContain('"%PYTHON%" -m hermes_cli.main %*')
+    expect(content).toContain('if /I "%~1"=="web" (')
+    expect(content).toContain('"%NODE%" "%WEBUI_SCRIPT%" %*')
+    expect(content).toContain('start "" "%APP%"')
+    expect(content).toContain('echo Usage: hermes-studio [command] [options]')
     expect(content).not.toContain('"%APP%" -- --hermes-cli')
   })
 
@@ -80,13 +105,16 @@ describe('Hermes Studio CLI shim', () => {
       homeDir,
       platform: 'darwin',
       executablePath: '/Applications/Hermes Studio.app/Contents/MacOS/Hermes Studio',
+      nodePath: '/runtime/node/bin/node',
+      webUiScriptPath: '/resources/webui/bin/hermes-web-ui.mjs',
       env: { PATH: '/usr/bin', SHELL: '/bin/zsh' },
     })
 
     expect(result.status).toBe('installed')
     expect(result.pathUpdated).toBe(true)
     expect(result.shimPath).toBe(shimPathForPlatform(join(homeDir, 'bin'), 'darwin'))
-    expect(readFileSync(result.shimPath, 'utf-8')).toContain('exec "$APP" -- --hermes-cli "$@"')
+    expect(readFileSync(result.shimPath, 'utf-8')).toContain("NODE='/runtime/node/bin/node'")
+    expect(readFileSync(result.shimPath, 'utf-8')).toContain("WEBUI_SCRIPT='/resources/webui/bin/hermes-web-ui.mjs'")
     expect(readFileSync(join(homeDir, '.zprofile'), 'utf-8')).toContain('export PATH="$HOME/bin:$PATH"')
   })
 })
