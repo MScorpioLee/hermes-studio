@@ -180,7 +180,8 @@ describe('config controller locked file updates', () => {
     })
     const yamlConfig = YAML.load(await readFile(join(hermesHome, 'config.yaml'), 'utf-8')) as any
     expect(yamlConfig.gatewayAutoStart).toBeUndefined()
-    expect(yamlConfig.gateway.multiplex_profiles).toBe(true)
+    expect(yamlConfig.multiplex_profiles).toBe(true)
+    expect(yamlConfig.gateway).toBeUndefined()
     expect(yamlConfig.model.default).toBe('keep-model')
 
     const readCtx = makeCtx({})
@@ -299,6 +300,39 @@ describe('config controller locked file updates', () => {
     expect(config.platforms.weixin.extra.account_id).toBeUndefined()
     expect(config.platforms.weixin.extra.base_url).toBe('https://old.example')
     expect(config.model.default).toBe('glm-5.1')
+  })
+
+  it('does not auto-restart gateway after credential updates when gateway auto-start is disabled', async () => {
+    await writeFile(join(hermesHome, 'config.yaml'), [
+      'platforms:',
+      '  weixin:',
+      '    token: old-token',
+      '',
+    ].join('\n'), 'utf-8')
+    await writeFile(join(hermesHome, 'config.json'), JSON.stringify({
+      gatewayAutoStart: { enabled: false },
+    }), 'utf-8')
+    const { updateCredentials } = await loadController()
+    const ctx = makeCtx({ platform: 'weixin', values: { token: 'new-token' } })
+
+    await updateCredentials(ctx)
+
+    expect(ctx.body).toEqual({ success: true })
+    expect(mockRestartGateway).not.toHaveBeenCalled()
+    const env = await readFile(join(hermesHome, '.env'), 'utf-8')
+    expect(env).toContain('WEIXIN_TOKEN=new-token')
+  })
+
+  it('does not auto-restart gateway after credential updates when gateway autostart is disabled by env', async () => {
+    mockGatewayAutostartDisabledByEnv.mockReturnValue(true)
+    await writeFile(join(hermesHome, 'config.yaml'), 'platforms: {}\n', 'utf-8')
+    const { updateCredentials } = await loadController()
+    const ctx = makeCtx({ platform: 'weixin', values: { token: 'new-token' } })
+
+    await updateCredentials(ctx)
+
+    expect(ctx.body).toEqual({ success: true })
+    expect(mockRestartGateway).not.toHaveBeenCalled()
   })
 
   it('writes QQBot credentials to env and overlays them into platform config reads', async () => {

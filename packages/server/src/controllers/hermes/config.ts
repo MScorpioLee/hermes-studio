@@ -208,13 +208,12 @@ async function readGatewayAutoStartForResponse(): Promise<ReturnType<typeof norm
 async function writeHermesGatewayManagement(mode: unknown): Promise<'per_profile' | 'unified' | null> {
   if (mode !== 'per_profile' && mode !== 'unified') return null
   await safeFileStore.updateYaml(configPath('default'), (config) => {
-    delete config.multiplex_profiles
     if (mode === 'unified') {
-      if (!config.gateway || typeof config.gateway !== 'object' || Array.isArray(config.gateway)) {
-        config.gateway = {}
-      }
-      config.gateway.multiplex_profiles = true
-    } else if (config.gateway && typeof config.gateway === 'object' && !Array.isArray(config.gateway)) {
+      config.multiplex_profiles = true
+    } else {
+      delete config.multiplex_profiles
+    }
+    if (config.gateway && typeof config.gateway === 'object' && !Array.isArray(config.gateway)) {
       delete config.gateway.multiplex_profiles
       if (Object.keys(config.gateway).length === 0) delete config.gateway
     }
@@ -226,6 +225,11 @@ async function writeHermesGatewayManagement(mode: unknown): Promise<'per_profile
     },
   })
   return mode
+}
+
+async function gatewayAutoRestartAllowed(): Promise<boolean> {
+  if (gatewayAutostartDisabledByEnv()) return false
+  return normalizeGatewayAutoStartConfig((await readAppConfig()).gatewayAutoStart).enabled !== false
 }
 
 export async function getConfig(ctx: any) {
@@ -310,8 +314,7 @@ export async function updateConfig(ctx: any) {
     // config changes (Feishu/Weixin/etc.) are applied.
     const shouldRestartGateway = restart !== false &&
       PLATFORM_SECTIONS.has(section) &&
-      !gatewayAutostartDisabledByEnv() &&
-      normalizeGatewayAutoStartConfig((await readAppConfig()).gatewayAutoStart).enabled !== false
+      await gatewayAutoRestartAllowed()
     if (shouldRestartGateway) {
       try {
         const restartResult = await restartGatewayForProfile(profile)
@@ -443,14 +446,16 @@ export async function updateCredentials(ctx: any) {
 
     // Platform adapters run through Hermes gateway; restart it so channel
     // credentials are applied.
-    try {
-      const restartResult = await restartGatewayForProfile(profile)
-      logger.info('[config] gateway restarted after credentials update platform=%s profile=%s result=%j', platform, profile, restartResult)
-    } catch (err) {
-      logger.error(err, 'Gateway restart failed')
-      ctx.status = 500
-      ctx.body = { error: err instanceof Error ? err.message : 'Gateway restart failed' }
-      return
+    if (await gatewayAutoRestartAllowed()) {
+      try {
+        const restartResult = await restartGatewayForProfile(profile)
+        logger.info('[config] gateway restarted after credentials update platform=%s profile=%s result=%j', platform, profile, restartResult)
+      } catch (err) {
+        logger.error(err, 'Gateway restart failed')
+        ctx.status = 500
+        ctx.body = { error: err instanceof Error ? err.message : 'Gateway restart failed' }
+        return
+      }
     }
 
     ctx.body = { success: true }

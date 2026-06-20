@@ -1313,7 +1313,7 @@ export default {
       enabled: '自动启动 gateway',
       enabledHint: '关闭后，启动期不会自动拉起任何 profile gateway。',
       management: '统一 gateway',
-      managementHint: '需要 Hermes Agent 0.17.0 及以上版本。开启后会写入 gateway.multiplex_profiles，让 default gateway 服务所有 profiles。关闭后会移除该配置。',
+      managementHint: '需要 Hermes Agent 0.17.0 及以上版本。开启后会写入 multiplex_profiles，让 default gateway 服务所有 profiles；其他 profile 不能单独配置飞书、微信、QQBot 等通讯工具入口。关闭后会移除该配置。',
       managementAuto: '自动',
       managementPerProfile: '每个 profile 一个 gateway',
       managementUnified: '统一 default gateway',

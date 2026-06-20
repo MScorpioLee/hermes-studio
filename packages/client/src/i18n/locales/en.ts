@@ -1321,7 +1321,7 @@ export default {
       enabled: 'Auto-start gateways',
       enabledHint: 'When disabled, startup will not automatically start any profile gateway.',
       management: 'Unified gateway',
-      managementHint: 'Requires Hermes Agent 0.17.0 or later. When enabled, Web UI writes gateway.multiplex_profiles so the default gateway serves every profile. Turning it off removes that config.',
+      managementHint: 'Requires Hermes Agent 0.17.0 or later. When enabled, Web UI writes multiplex_profiles so the default gateway serves every profile; other profiles cannot configure separate Feishu, Weixin, QQBot, or similar messaging entrypoints. Turning it off removes that config.',
       managementAuto: 'Auto',
       managementPerProfile: 'One gateway per profile',
       managementUnified: 'Unified default gateway',

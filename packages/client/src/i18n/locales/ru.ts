@@ -1175,7 +1175,7 @@ export default {
       enabled: 'Автоматически запускать gateway',
       enabledHint: 'Если выключено, при старте не будет автоматически запущен ни один gateway профиля.',
       management: 'Единый gateway',
-      managementHint: 'Требуется Hermes Agent 0.17.0 или новее. Если включено, Web UI записывает gateway.multiplex_profiles, чтобы default gateway обслуживал все профили. При выключении эта настройка удаляется.',
+      managementHint: 'Требуется Hermes Agent 0.17.0 или новее. Если включено, Web UI записывает multiplex_profiles, чтобы default gateway обслуживал все профили; другие профили не могут отдельно настраивать точки входа сообщений, такие как Feishu, Weixin или QQBot. При выключении эта настройка удаляется.',
       managementAuto: 'Автоматически',
       managementPerProfile: 'Один gateway на профиль',
       managementUnified: 'Единый default gateway',

@@ -1169,7 +1169,7 @@ export default {
       enabled: 'Gateway 자동 시작',
       enabledHint: '끄면 시작 시 어떤 profile gateway도 자동으로 실행하지 않습니다.',
       management: '통합 gateway',
-      managementHint: 'Hermes Agent 0.17.0 이상이 필요합니다. 켜면 Web UI가 gateway.multiplex_profiles를 기록해 default gateway가 모든 profiles를 처리합니다. 끄면 해당 설정을 제거합니다.',
+      managementHint: 'Hermes Agent 0.17.0 이상이 필요합니다. 켜면 Web UI가 multiplex_profiles를 기록해 default gateway가 모든 profiles를 처리합니다. 다른 profile은 Feishu, Weixin, QQBot 같은 메시징 진입점을 별도로 설정할 수 없습니다. 끄면 해당 설정을 제거합니다.',
       managementAuto: '자동',
       managementPerProfile: 'Profile별 gateway 하나',
       managementUnified: '통합 default gateway',
