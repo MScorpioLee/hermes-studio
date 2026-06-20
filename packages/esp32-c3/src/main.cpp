@@ -512,7 +512,7 @@ void drawOledFrame() {
     status += F(" ");
     status += oledHint;
   }
-  oledDrawCenteredText(57, fitOledText(status, 21), 1);
+  oledDrawScrollingText(57, status, 1);
 }
 
 void refreshOled(bool force = false) {
