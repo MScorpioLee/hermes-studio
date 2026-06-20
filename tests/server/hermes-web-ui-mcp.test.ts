@@ -331,8 +331,41 @@ describe('hermes-web-ui MCP server', () => {
         res.end(JSON.stringify({ count: 7 }))
         return
       }
+      if (req.url === '/api/hermes/usage/stats?days=7') {
+        res.end(JSON.stringify({
+          total_input_tokens: 100,
+          total_output_tokens: 40,
+          total_cache_read_tokens: 10,
+          total_cache_write_tokens: 2,
+          total_reasoning_tokens: 5,
+          total_sessions: 3,
+          total_cost: 0.0123,
+          total_api_calls: 4,
+          period_days: 7,
+          model_usage: [{ model: 'gpt-5.1', input_tokens: 100, output_tokens: 40, cache_read_tokens: 10, cache_write_tokens: 2, reasoning_tokens: 5, sessions: 3 }],
+          daily_usage: [],
+        }))
+        return
+      }
       if (req.url === '/api/hermes/sessions/session-1' && req.method === 'GET') {
         res.end(JSON.stringify({ id: 'session-1', title: 'Session 1' }))
+        return
+      }
+      if (req.url === '/api/hermes/sessions/session-1/context') {
+        res.end(JSON.stringify({
+          session_id: 'session-1',
+          title: 'Session 1',
+          messages: [
+            { id: 1, role: 'user', content: 'older', timestamp: 1 },
+            { id: 2, role: 'assistant', content: 'tool call shell', timestamp: 2, tool_calls: [{ id: 'call-1' }] },
+            { id: 3, role: 'tool', content: 'secret tool result', timestamp: 3, tool_call_id: 'call-1', tool_name: 'read_file' },
+            { id: 4, role: 'user', content: 'hello', timestamp: 4 },
+            { id: 5, role: 'assistant', content: 'hi', timestamp: 5 },
+            { id: 6, role: 'user', content: 'next', timestamp: 6 },
+            { id: 7, role: 'assistant', content: 'done', timestamp: 7 },
+          ],
+          message_count: 7,
+        }))
         return
       }
       if (req.url === '/api/hermes/sessions/session-1' && req.method === 'DELETE') {
@@ -363,6 +396,35 @@ describe('hermes-web-ui MCP server', () => {
             { id: 'openai', label: 'OpenAI', models: ['gpt-5.1'] },
             { id: 'openrouter', label: 'OpenRouter', models: ['gpt-5.1', 'claude-sonnet'], model_meta: { 'claude-sonnet': { alias: 'Claude Sonnet' } } },
           ],
+        }))
+        return
+      }
+      if (req.url === '/api/hermes/config/providers' && req.method === 'POST') {
+        let raw = ''
+        req.on('data', chunk => { raw += chunk })
+        req.on('end', () => {
+          res.end(JSON.stringify({
+            success: true,
+            body: raw ? JSON.parse(raw) : null,
+          }))
+        })
+        return
+      }
+      if (req.url === '/api/hermes/config/providers/custom%3Aedge-router?source=providers&providerKey=edge-router' && req.method === 'DELETE') {
+        res.end(JSON.stringify({ success: true, deleted: 'custom:edge-router' }))
+        return
+      }
+      if (req.url === '/api/hermes/performance/runtime') {
+        res.end(JSON.stringify({
+          timestamp: 123456,
+          bridge: {
+            reachable: true,
+            workers: [
+              { profile: 'default', pid: 101, running: true, sessionCount: 3, runningSessionCount: 1, lastUsedAt: 123400, endpoint: 'ipc://default' },
+              { profile: 'research', pid: 102, running: true, sessionCount: 2, runningSessionCount: 0, lastUsedAt: 123300, endpoint: 'ipc://research' },
+            ],
+          },
+          sessions: { active: 5, running: 1, byProfile: { default: 3, research: 2 } },
         }))
         return
       }
@@ -435,6 +497,37 @@ describe('hermes-web-ui MCP server', () => {
       name: 'hermes_studio_use_model_provider_get',
       arguments: { model: 'Claude Sonnet' },
     })
+    writeRpc(child, 15, 'tools/call', {
+      name: 'hermes_studio_use_provider_add',
+      arguments: {
+        name: 'Edge Router',
+        base_url: 'https://edge.example/v1',
+        api_key: 'secret-key',
+        model: 'edge-model',
+        context_length: 128000,
+        api_mode: 'chat_completions',
+      },
+    })
+    writeRpc(child, 16, 'tools/call', {
+      name: 'hermes_studio_use_provider_delete',
+      arguments: {
+        pool_key: 'custom:edge-router',
+        source: 'providers',
+        providerKey: 'edge-router',
+      },
+    })
+    writeRpc(child, 17, 'tools/call', {
+      name: 'hermes_studio_use_usage_stats',
+      arguments: { days: 7 },
+    })
+    writeRpc(child, 18, 'tools/call', {
+      name: 'hermes_studio_use_session_context',
+      arguments: { session_id: 'session-1', turns: 1 },
+    })
+    writeRpc(child, 19, 'tools/call', {
+      name: 'hermes_studio_use_worker_status',
+      arguments: {},
+    })
 
     const initialized = await waitForRpc(responses, 1)
     expect(initialized.result.serverInfo).toMatchObject({ toolset: 'use' })
@@ -442,9 +535,14 @@ describe('hermes-web-ui MCP server', () => {
     const list = await waitForRpc(responses, 2)
     expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_chat_run')).toBe(true)
     expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_sessions_count')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_usage_stats')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_session_context')).toBe(true)
     expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_session_delete')).toBe(true)
     expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_session_rename')).toBe(true)
     expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_model_provider_get')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_provider_add')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_provider_delete')).toBe(true)
+    expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_use_worker_status')).toBe(true)
     expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_api_request')).toBe(false)
     expect(list.result.tools.some((tool: any) => tool.name === 'hermes_studio_lan_devices_list')).toBe(false)
 
@@ -481,6 +579,46 @@ describe('hermes-web-ui MCP server', () => {
       provider: 'openrouter',
       ambiguous: false,
     })
+    const addedProvider = JSON.parse((await waitForRpc(responses, 15)).result.content[0].text)
+    expect(addedProvider).toEqual({
+      success: true,
+      body: {
+        name: 'Edge Router',
+        base_url: 'https://edge.example/v1',
+        api_key: 'secret-key',
+        model: 'edge-model',
+        context_length: 128000,
+        api_mode: 'chat_completions',
+      },
+    })
+    const deletedProvider = JSON.parse((await waitForRpc(responses, 16)).result.content[0].text)
+    expect(deletedProvider).toEqual({ success: true, deleted: 'custom:edge-router' })
+    const usage = JSON.parse((await waitForRpc(responses, 17)).result.content[0].text)
+    expect(usage).toMatchObject({ total_input_tokens: 100, total_output_tokens: 40, period_days: 7 })
+    const context = JSON.parse((await waitForRpc(responses, 18)).result.content[0].text)
+    expect(context).toMatchObject({
+      session_id: 'session-1',
+      message_count: 2,
+      clean_message_count: 5,
+      requested_turns: 1,
+      messages: [
+        { id: 6, role: 'user', content: 'next', timestamp: 6 },
+        { id: 7, role: 'assistant', content: 'done', timestamp: 7 },
+      ],
+    })
+    expect(JSON.stringify(context)).not.toContain('tool_calls')
+    expect(JSON.stringify(context)).not.toContain('secret tool result')
+    const workerStatus = JSON.parse((await waitForRpc(responses, 19)).result.content[0].text)
+    expect(workerStatus).toMatchObject({
+      bridge_reachable: true,
+      worker_count: 2,
+      running_worker_count: 2,
+      session_count: 5,
+      interacting_session_count: 1,
+      completed_interaction_count: 4,
+    })
+    expect(workerStatus.interacting_workers.map((worker: any) => worker.profile)).toEqual(['default'])
+    expect(workerStatus.completed_workers.map((worker: any) => worker.profile)).toEqual(['research'])
 
     await new Promise<void>(resolve => server.close(() => resolve()))
   })

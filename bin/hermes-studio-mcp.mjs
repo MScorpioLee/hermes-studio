@@ -576,6 +576,72 @@ function pickDefined(source, keys) {
   return picked
 }
 
+function boundedInteger(value, fallback, min, max) {
+  const parsed = Number.parseInt(String(value ?? ''), 10)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(min, Math.min(max, parsed))
+}
+
+function cleanSessionContextPayload(payload, args = {}) {
+  const turns = boundedInteger(args.turns, 10, 1, 50)
+  const messages = Array.isArray(payload?.messages) ? payload.messages : []
+  const cleanMessages = messages
+    .filter(message => message?.role === 'user' || message?.role === 'assistant')
+    .filter(message => !Array.isArray(message?.tool_calls) || message.tool_calls.length === 0)
+    .filter(message => !message?.tool_call_id && !message?.tool_name)
+    .map(message => pickDefined(message, [
+      'id',
+      'session_id',
+      'role',
+      'content',
+      'timestamp',
+      'reasoning',
+      'reasoning_content',
+    ]))
+    .filter(message => typeof message.content === 'string' ? message.content.trim() : message.content != null)
+  const maxMessages = turns * 2
+  const returnedMessages = cleanMessages.slice(-maxMessages)
+  return {
+    ...payload,
+    messages: returnedMessages,
+    message_count: returnedMessages.length,
+    clean_message_count: cleanMessages.length,
+    requested_turns: turns,
+  }
+}
+
+function summarizeWorkerRuntime(payload) {
+  const workers = Array.isArray(payload?.bridge?.workers) ? payload.bridge.workers : []
+  const summarizedWorkers = workers.map(worker => {
+    const sessionCount = Number(worker?.sessionCount || 0)
+    const interactingSessionCount = Number(worker?.runningSessionCount || 0)
+    return {
+      profile: worker?.profile || '',
+      pid: worker?.pid || 0,
+      running: Boolean(worker?.running),
+      session_count: sessionCount,
+      interacting_session_count: interactingSessionCount,
+      completed_interaction_count: Math.max(0, sessionCount - interactingSessionCount),
+      last_used_at: worker?.lastUsedAt || null,
+      endpoint: worker?.endpoint || '',
+    }
+  })
+  const interactingWorkers = summarizedWorkers.filter(worker => worker.interacting_session_count > 0)
+  const completedWorkers = summarizedWorkers.filter(worker => worker.session_count > 0 && worker.interacting_session_count === 0)
+  return {
+    timestamp: payload?.timestamp || Date.now(),
+    bridge_reachable: Boolean(payload?.bridge?.reachable),
+    worker_count: summarizedWorkers.length,
+    running_worker_count: summarizedWorkers.filter(worker => worker.running).length,
+    session_count: summarizedWorkers.reduce((sum, worker) => sum + worker.session_count, 0),
+    interacting_session_count: summarizedWorkers.reduce((sum, worker) => sum + worker.interacting_session_count, 0),
+    completed_interaction_count: summarizedWorkers.reduce((sum, worker) => sum + worker.completed_interaction_count, 0),
+    interacting_workers: interactingWorkers,
+    completed_workers: completedWorkers,
+    workers: summarizedWorkers,
+  }
+}
+
 function availableModelGroups(payload) {
   const groups = Array.isArray(payload?.groups)
     ? payload.groups
@@ -810,6 +876,17 @@ const tools = [
       }),
   },
   {
+    name: 'hermes_studio_use_usage_stats',
+    toolset: 'use',
+    description: 'Query Hermes Studio usage totals, cost estimate, model breakdown, and daily trend for the selected profile.',
+    inputSchema: inputSchema({
+        days: {
+          type: 'number',
+          description: 'Number of days to include. Server clamps the range to 1-365. Defaults to 30.',
+        },
+      }),
+  },
+  {
     name: 'hermes_studio_use_session_get',
     toolset: 'use',
     description: 'Get one Hermes Studio session by id.',
@@ -832,6 +909,21 @@ const tools = [
         include_internal: {
           type: 'boolean',
           description: 'Set true to include internal/non-user-visible message roles.',
+        },
+      }, ['session_id']),
+  },
+  {
+    name: 'hermes_studio_use_session_context',
+    toolset: 'use',
+    description: 'Get the latest clean user/assistant context for one session, defaulting to the last 10 conversation turns and excluding tool calls/tool results.',
+    inputSchema: inputSchema({
+        session_id: {
+          type: 'string',
+          description: 'Session id.',
+        },
+        turns: {
+          type: 'number',
+          description: 'Number of recent conversation turns to return. Defaults to 10.',
         },
       }, ['session_id']),
   },
@@ -883,6 +975,68 @@ const tools = [
           description: 'Model id or visible model alias to look up.',
         },
       }, ['model']),
+  },
+  {
+    name: 'hermes_studio_use_provider_add',
+    toolset: 'use',
+    description: 'Add or update a Hermes Studio model provider for the selected profile, then make it the active default provider/model.',
+    inputSchema: inputSchema({
+        name: {
+          type: 'string',
+          description: 'Provider display/config name. For custom providers this becomes the custom provider name.',
+        },
+        base_url: {
+          type: 'string',
+          description: 'Provider API base URL. For built-in providers this can be omitted only when the preset supplies a default URL.',
+        },
+        api_key: {
+          type: 'string',
+          description: 'Provider API key. Some built-in providers do not require this.',
+        },
+        model: {
+          type: 'string',
+          description: 'Default model id to use with this provider.',
+        },
+        context_length: {
+          type: 'number',
+          description: 'Optional context length metadata for the model.',
+        },
+        providerKey: {
+          type: ['string', 'null'],
+          description: 'Optional built-in or custom provider key. Omit for a normal custom provider; use values like openai-codex or custom:my-provider when needed.',
+        },
+        api_mode: {
+          type: 'string',
+          enum: ['chat_completions', 'codex_responses', 'anthropic_messages', 'bedrock_converse', 'codex_app_server'],
+          description: 'Optional provider wire API mode.',
+        },
+      }, ['name', 'base_url', 'model']),
+  },
+  {
+    name: 'hermes_studio_use_provider_delete',
+    toolset: 'use',
+    description: 'Delete a Hermes Studio model provider or clear a built-in provider credential for the selected profile.',
+    inputSchema: inputSchema({
+        pool_key: {
+          type: 'string',
+          description: 'Provider pool key to delete, for example custom:my-provider, openai, openai-codex, or deepseek.',
+        },
+        source: {
+          type: 'string',
+          enum: ['custom_providers', 'providers'],
+          description: 'Optional custom provider storage source when removing one duplicate location.',
+        },
+        providerKey: {
+          type: 'string',
+          description: 'Optional providers-dict key to disambiguate dict-backed custom providers.',
+        },
+      }, ['pool_key']),
+  },
+  {
+    name: 'hermes_studio_use_worker_status',
+    toolset: 'use',
+    description: 'Summarize current Hermes worker state, including worker count, completed interactions, and sessions still interacting.',
+    inputSchema: inputSchema(),
   },
   {
     name: 'hermes_studio_lan_devices_list',
@@ -1094,12 +1248,21 @@ async function callTool(name, args = {}) {
       return jsonText(await request('/api/hermes/sessions/count', withAuthArgs(args, {
         query: pickDefined(args, ['source']),
       })))
+    case 'hermes_studio_use_usage_stats':
+      return jsonText(await request('/api/hermes/usage/stats', withAuthArgs(args, {
+        query: pickDefined(args, ['days']),
+      })))
     case 'hermes_studio_use_session_get':
       return jsonText(await request(`/api/hermes/sessions/${encodeURIComponent(args.session_id)}`, withAuthArgs(args)))
     case 'hermes_studio_use_session_messages':
       return jsonText(await request(`/api/hermes/sessions/conversations/${encodeURIComponent(args.session_id)}/messages`, withAuthArgs(args, {
         query: args.include_internal ? { humanOnly: '0' } : undefined,
       })))
+    case 'hermes_studio_use_session_context':
+      return jsonText(cleanSessionContextPayload(
+        await request(`/api/hermes/sessions/${encodeURIComponent(args.session_id)}/context`, withAuthArgs(args)),
+        args,
+      ))
     case 'hermes_studio_use_session_delete':
       return jsonText(await request(`/api/hermes/sessions/${encodeURIComponent(args.session_id)}`, withAuthArgs(args, {
         method: 'DELETE',
@@ -1117,6 +1280,28 @@ async function callTool(name, args = {}) {
       return jsonText(findProvidersForModel(
         await request('/api/hermes/available-models', withAuthArgs(args)),
         args.model,
+      ))
+    case 'hermes_studio_use_provider_add':
+      return jsonText(await request('/api/hermes/config/providers', withAuthArgs(args, {
+        method: 'POST',
+        body: pickDefined(args, [
+          'name',
+          'base_url',
+          'api_key',
+          'model',
+          'context_length',
+          'providerKey',
+          'api_mode',
+        ]),
+      })))
+    case 'hermes_studio_use_provider_delete':
+      return jsonText(await request(`/api/hermes/config/providers/${encodeURIComponent(args.pool_key)}`, withAuthArgs(args, {
+        method: 'DELETE',
+        query: pickDefined(args, ['source', 'providerKey']),
+      })))
+    case 'hermes_studio_use_worker_status':
+      return jsonText(summarizeWorkerRuntime(
+        await request('/api/hermes/performance/runtime', withAuthArgs(args)),
       ))
     case 'hermes_studio_lan_devices_list':
       return jsonText(await request('/api/devices', withAuthArgs(args)))
