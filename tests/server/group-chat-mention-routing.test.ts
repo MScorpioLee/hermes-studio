@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ContentBlock } from '../../packages/server/src/services/hermes/run-chat/types'
 import {
   isAllAgentsMentioned,
   isAgentMentioned,
   isReservedMentionName,
+  parseLeadingMentionBlock,
+  resolveMentionRouting,
   resolveMentionTargets,
-  stripMentionRoutingTokens,
+  stripMentionAddressBlockFromInput,
+  stripMentionAddressBlockFromText,
 } from '../../packages/server/src/services/hermes/group-chat/mention-routing'
 
 type TestAgent = { name: string; id?: string; agentId?: string; profile?: string }
@@ -12,8 +16,13 @@ type TestAgent = { name: string; id?: string; agentId?: string; profile?: string
 const agents: TestAgent[] = [
   { name: 'Alice', id: 'socket-alice', agentId: 'agent-alice' },
   { name: 'Bob', id: 'socket-bob', agentId: 'agent-bob' },
+  { name: 'Bobcat', id: 'socket-bobcat', agentId: 'agent-bobcat' },
   { name: 'Regex.Bot', id: 'socket-regex', agentId: 'agent-regex' },
 ]
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 describe('group chat mention routing', () => {
   it('reserves @all so it cannot be confused with a literal agent name', () => {
@@ -39,7 +48,7 @@ describe('group chat mention routing', () => {
   })
 
   it('routes @all to every room agent except the sender identity', () => {
-    expect(resolveMentionTargets(agents, '@all summarize the options', 'socket-alice').map(a => a.name)).toEqual(['Bob', 'Regex.Bot'])
+    expect(resolveMentionTargets(agents, '@all summarize the options', 'socket-alice').map(a => a.name)).toEqual(['Bob', 'Bobcat', 'Regex.Bot'])
   })
 
   it('keeps same-name human senders routable because sender exclusion uses identity, not display name', () => {
@@ -63,18 +72,72 @@ describe('group chat mention routing', () => {
     expect(resolveMentionTargets(sameNameAgents, '@test check yourself', 'socket-agent-test').map(a => a.name)).toEqual([])
   })
 
-  it('routes explicit mentions without treating partial @all text as broadcast', () => {
-    expect(resolveMentionTargets(agents, '@Bob and @Regex.Bot compare plans', 'socket-alice').map(a => a.name)).toEqual(['Bob', 'Regex.Bot'])
-    expect(resolveMentionTargets(agents, '@alligator and @Bob compare plans', 'socket-alice').map(a => a.name)).toEqual(['Bob'])
+  it('routes user messages on mentions anywhere in the message', () => {
+    expect(resolveMentionTargets(agents, 'please ask @Bob and @Regex.Bot to compare plans', 'socket-alice', { senderKind: 'user' }).map(a => a.name)).toEqual(['Bob', 'Regex.Bot'])
+    expect(resolveMentionTargets(agents, 'please ask @all to compare plans', 'socket-alice', { senderKind: 'user' }).map(a => a.name)).toEqual(['Bob', 'Bobcat', 'Regex.Bot'])
   })
 
-  it('dedupes mixed @all and explicit mentions', () => {
-    expect(resolveMentionTargets(agents, '@all @Bob compare plans', 'socket-alice').map(a => a.name)).toEqual(['Bob', 'Regex.Bot'])
+  it('routes agent messages only from a leading address block', () => {
+    expect(resolveMentionTargets(agents, '@Bob @Regex.Bot compare plans', 'socket-alice', { senderKind: 'agent' }).map(a => a.name)).toEqual(['Bob', 'Regex.Bot'])
+    expect(resolveMentionTargets(agents, 'compare plans with @Bob and @Regex.Bot later', 'socket-alice', { senderKind: 'agent' })).toEqual([])
+    expect(resolveMentionTargets(agents, '@all compare plans', 'socket-alice', { senderKind: 'agent' }).map(a => a.name)).toEqual(['Bob', 'Bobcat', 'Regex.Bot'])
   })
 
-  it('strips the broadcast token and this agent mention before routing to the model', () => {
-    expect(stripMentionRoutingTokens('@all @Bob please review', 'Bob')).toBe('please review')
-    expect(stripMentionRoutingTokens('@ALL, @Regex.Bot: please review', 'Regex.Bot')).toBe('please review')
-    expect(stripMentionRoutingTokens('@all please review', 'all')).toBe('please review')
+  it('supports rolling back agent-authored leading-address routing via env gate', () => {
+    vi.stubEnv('HERMES_GROUP_CHAT_AGENT_LEADING_ADDRESS_ROUTING', '0')
+
+    expect(resolveMentionTargets(agents, 'compare plans with @Bob and @Regex.Bot later', 'socket-alice', { senderKind: 'agent' }).map(a => a.name)).toEqual(['Bob', 'Regex.Bot'])
+  })
+
+  it('parses a leading address block and returns the exact consumed range', () => {
+    const parsed = parseLeadingMentionBlock('@Bob @Regex.Bot: compare plans', agents)
+    expect(parsed?.targetNames).toEqual(['Bob', 'Regex.Bot'])
+    expect(parsed?.range).toEqual({ startIndex: 0, endIndex: 17 })
+    expect(stripMentionAddressBlockFromText('@Bob @Regex.Bot: compare plans', parsed?.range)).toBe('compare plans')
+  })
+
+  it('does not route or strip prefix collisions', () => {
+    const parsed = parseLeadingMentionBlock('@Bobcat compare plans', agents.filter(agent => agent.name === 'Bob'))
+    expect(parsed).toBeNull()
+    expect(resolveMentionTargets(agents.filter(agent => agent.name === 'Bob'), '@Bobcat compare plans', 'human-1', { senderKind: 'agent' })).toEqual([])
+    expect(resolveMentionRouting(agents.filter(agent => agent.name === 'Bob'), '@Bobcat compare plans', 'human-1', { senderKind: 'agent' }).addressBlock).toBeNull()
+  })
+
+  it('suppresses self-mentions from routed targets', () => {
+    expect(resolveMentionTargets(agents, '@Alice compare plans', 'socket-alice', { senderKind: 'agent' })).toEqual([])
+    expect(resolveMentionTargets(agents, '@Alice @Bob compare plans', 'socket-alice', { senderKind: 'agent' }).map(a => a.name)).toEqual(['Bob'])
+  })
+
+  it('tracks and strips only the routed leading address block for multimodal ContentBlock[] input', () => {
+    const input: ContentBlock[] = [
+      { type: 'image', name: 'chart', path: '/tmp/chart.png', media_type: 'image/png' },
+      { type: 'text', text: '@Bob @Regex.Bot compare options' },
+      { type: 'text', text: 'Later prose mentions @Bob again for context.' },
+    ]
+
+    const routing = resolveMentionRouting(agents, input, 'human-1', { senderKind: 'agent' })
+    expect(routing.targetNames).toEqual(['Bob', 'Regex.Bot'])
+    expect(routing.addressBlock).toMatchObject({
+      textBlockIndex: 1,
+      range: { startIndex: 0, endIndex: 16 },
+    })
+
+    const stripped = stripMentionAddressBlockFromInput(input, routing.addressBlock) as ContentBlock[]
+    expect(stripped).toEqual([
+      { type: 'image', name: 'chart', path: '/tmp/chart.png', media_type: 'image/png' },
+      { type: 'text', text: 'compare options' },
+      { type: 'text', text: 'Later prose mentions @Bob again for context.' },
+    ])
+  })
+
+  it('keeps later text-block mentions informational for agent-authored messages', () => {
+    const input: ContentBlock[] = [
+      { type: 'text', text: 'I think @Bob should review this later.' },
+      { type: 'text', text: '@Regex.Bot compare options' },
+    ]
+
+    const routing = resolveMentionRouting(agents, input, 'socket-alice', { senderKind: 'agent' })
+    expect(routing.targetNames).toEqual([])
+    expect(routing.addressBlock).toBeNull()
   })
 })

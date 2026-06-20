@@ -12,9 +12,9 @@ import type { StoredMessage } from '../context-engine/types'
 import { buildProjectedGroupChatHistory, projectGroupChatMessage } from './context-projection'
 import { sliceGroupMessagesForSnapshotTail } from './group-message-ordering'
 import {
-    isAllAgentsMentioned,
-    resolveMentionTargets,
-    stripMentionRoutingTokens,
+    resolveMentionRouting,
+    stripMentionAddressBlockFromInput,
+    type MentionSenderKind,
 } from './mention-routing'
 
 export const GROUP_CHAT_AGENT_SOCKET_SECRET = randomBytes(32).toString('hex')
@@ -47,6 +47,15 @@ type MentionMessage = {
     role?: string
     input?: string | ContentBlock[]
     mentionDepth?: number
+    senderKind: MentionSenderKind
+    mentionRouting?: {
+        targetNames: string[]
+        scope: 'all' | 'explicit' | 'none'
+        addressBlock?: {
+            range: { startIndex: number; endIndex: number }
+            textBlockIndex?: number
+        } | null
+    }
 }
 
 export function mentionMessageToStoredContextMessage(roomId: string, msg: MentionMessage): StoredMessage {
@@ -514,17 +523,14 @@ class AgentClient {
             // Keep routing explicit while removing only the mention tokens that
             // selected this agent. This avoids making @all look like an
             // instruction for the model to fan out another routing cycle.
-            const routedPrefix = isAllAgentsMentioned(msg.content)
+            const routedPrefix = msg.mentionRouting?.scope === 'all'
                 ? `群聊系统：这条消息通过 @all 提及所有 agent，你是其中之一，请直接回复。`
                 : `群聊系统：这条消息已经提及你（${this.name}），请直接回复；即使消息同时提及其他成员，也不要因此输出空回复。`
-            const rawInput = msg.input || msg.content
-            const input = isContentBlockArray(rawInput)
-                ? rawInput.map((block) => {
-                    if (block.type !== 'text') return block
-                    const text = stripMentionRoutingTokens(String(block.text || msg.content), this.name)
-                    return { ...block, text: `${routedPrefix}\n\n原始消息：${text || msg.content}` }
-                })
-                : `${routedPrefix}\n\n原始消息：${stripMentionRoutingTokens(msg.content, this.name) || msg.content}`
+            const rawInput = msg.input ?? msg.content
+            const strippedInput = stripMentionAddressBlockFromInput(rawInput, msg.mentionRouting?.addressBlock)
+            const input = isContentBlockArray(strippedInput)
+                ? [{ type: 'text' as const, text: `${routedPrefix}\n\n原始消息：` }, ...strippedInput]
+                : `${routedPrefix}\n\n原始消息：${String(strippedInput || msg.content)}`
             const runPrompt = 'When calling Hermes Web UI endpoints from tools or skills, include the current Hermes profile as the X-Hermes-Profile header if the endpoint supports profile-scoped behavior.'
             instructions = instructions ? `${runPrompt}\n${instructions}` : runPrompt
             const bridgeInput: AgentBridgeMessage = isContentBlockArray(input)
@@ -1103,7 +1109,17 @@ export class AgentClients {
      */
     async processMentions(roomId: string, msg: MentionMessage): Promise<void> {
         const agents = this.getAgents(roomId)
-        const mentioned = resolveMentionTargets(agents, msg.content, msg.senderId)
+        const routing = resolveMentionRouting(agents, msg.input ?? msg.content, msg.senderId, {
+            senderKind: msg.senderKind,
+        })
+        const mentioned = routing.targets
+        msg.mentionRouting = {
+            targetNames: routing.targetNames,
+            scope: routing.scope,
+            addressBlock: routing.addressBlock
+                ? { range: routing.addressBlock.range, textBlockIndex: routing.addressBlock.textBlockIndex }
+                : null,
+        }
         if (mentioned.length === 0) return
 
         logger.debug(`[AgentClients] ${mentioned.map(a => a.name).join(', ')} mentioned by ${msg.senderName}`)
