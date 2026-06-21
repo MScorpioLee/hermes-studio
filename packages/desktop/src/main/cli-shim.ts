@@ -96,6 +96,8 @@ export function createShimContent(
 ): string {
   if (platform === 'win32') {
     const runtimePlatform = windowsRuntimePlatformKey(archName)
+    const cliForwarder = `const cp=require('node:child_process');const args=process.argv.slice(1);if(args[0]&&args[0].toLowerCase()==='cli')args.shift();const r=cp.spawnSync(process.env.PYTHON,['-m','hermes_cli.main',...args],{stdio:'inherit'});if(r.error){console.error(r.error.message);process.exit(127)}process.exit(r.status===null?(r.signal?1:0):r.status)`
+    const webForwarder = `const cp=require('node:child_process');const args=process.argv.slice(1);if(args[0]&&args[0].toLowerCase()==='web')args.shift();const r=cp.spawnSync(process.env.NODE,[process.env.WEBUI_SCRIPT,...args],{stdio:'inherit'});if(r.error){console.error(r.error.message);process.exit(127)}process.exit(r.status===null?(r.signal?1:0):r.status)`
     return [
       '@echo off',
       `rem ${SHIM_MARKER}`,
@@ -129,8 +131,12 @@ export function createShimContent(
       '  echo Open Hermes Studio once to finish runtime setup, then retry hermes-studio cli. 1>&2',
       '  exit /b 127',
       ')',
-      'shift',
-      '"%PYTHON%" -m hermes_cli.main %*',
+      'if not exist "%NODE%" (',
+      '  echo Hermes Studio Node runtime not found at "%NODE%" 1>&2',
+      '  echo Open Hermes Studio once to finish runtime setup, then retry hermes-studio cli. 1>&2',
+      '  exit /b 127',
+      ')',
+      `"%NODE%" -e "${cliForwarder}" %*`,
       'exit /b %ERRORLEVEL%',
       ':runWeb',
       'if not exist "%NODE%" (',
@@ -142,8 +148,7 @@ export function createShimContent(
       '  echo Hermes Web UI script not found at "%WEBUI_SCRIPT%" 1>&2',
       '  exit /b 127',
       ')',
-      'shift',
-      '"%NODE%" "%WEBUI_SCRIPT%" %*',
+      `"%NODE%" -e "${webForwarder}" %*`,
       'exit /b %ERRORLEVEL%',
       ':openApp',
       'start "" "%APP%"',
