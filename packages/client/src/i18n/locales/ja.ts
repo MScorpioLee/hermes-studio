@@ -1828,6 +1828,7 @@ export default {
     new_0_6_18_4: 'MCU デバイス表示が明確になり、tool call が speech より優先表示され、audio が早すぎる DONE を出さず、active device login が安定し、長い ONLINE/IP テキストはスクロールします',
     new_0_6_18_5: '音声とメッセージの workflow にカスタム HTTP TTS/STT endpoint、audio transcoding、fork message action、永続 fork marker、より明確な upload error を追加しました',
     new_0_6_18_6: 'Desktop と runtime setup は、Unicode-safe な Windows PATH 登録、Hermes Agent 0.17.0 runtime publish 対応、mobile PWA metadata、profile/auth recovery 修正で安全になりました',
+    new_0_6_18_7: '各所の細部を改善しました',
     new_0_6_17_1: 'Codex と Claude Code の会話起動問題を修正しました',
     new_0_6_16_1: 'Provider 設定でカスタム API mode を保持し、LongCat プリセットを正しく扱い、v12 Provider の削除と auth/API-key 画像 Provider を含むモデルカタログ同期に対応しました',
     new_0_6_16_2: 'チャットコマンドに reload-skills、Web タイトル更新、未知のスラッシュコマンド透過、tool call と tool result を除いたクリーンな session context API を追加しました',

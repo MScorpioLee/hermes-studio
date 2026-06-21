@@ -1842,6 +1842,7 @@ export default {
     new_0_6_18_4: 'Обратная связь MCU стала понятнее: tool calls показываются поверх speech, audio больше не помечает задачи DONE слишком рано, active-device login стабильнее, а длинный ONLINE/IP текст прокручивается',
     new_0_6_18_5: 'Voice и message workflows получили custom HTTP TTS/STT endpoints, audio transcoding, fork message actions, persistent fork markers и более понятные upload errors',
     new_0_6_18_6: 'Desktop и runtime setup стали безопаснее: Unicode-safe регистрация Windows PATH, поддержка публикации Hermes Agent 0.17.0 runtime, mobile PWA metadata и несколько исправлений profile/auth recovery',
+    new_0_6_18_7: 'Улучшения и доработка деталей во всем приложении',
     new_0_6_17_1: 'Исправлены проблемы запуска диалогов Codex и Claude Code',
     new_0_6_16_1: 'Настройки Provider теперь сохраняют пользовательские API mode, корректно покрывают LongCat, поддерживают удаление Provider v12 и синхронизируют каталоги моделей с auth и API-key image Provider',
     new_0_6_16_2: 'Команды чата получили reload-skills, обновление web title, passthrough неизвестных slash-команд и чистый session context API без tool calls и tool results',

@@ -2094,6 +2094,7 @@ export default {
     new_0_6_18_4: 'MCU device feedback is clearer: tool calls stay visible over speech, audio no longer marks tasks done too early, active-device login is steadier, and long online/IP status text scrolls',
     new_0_6_18_5: 'Voice and message workflows gained custom HTTP TTS/STT endpoint support, audio transcoding, fork message actions, persistent fork markers, and clearer upload errors',
     new_0_6_18_6: 'Desktop and runtime setup are safer with Unicode-safe Windows PATH registration, Hermes Agent 0.17.0 runtime publishing support, mobile PWA metadata, and several profile/auth recovery fixes',
+    new_0_6_18_7: 'Polish and detail improvements across the app',
     new_0_6_17_1: 'Fixed Codex and Claude Code conversation startup issues',
     new_0_6_16_1: 'Provider settings now preserve custom API modes, cover LongCat correctly, support deleting v12 provider entries, and keep model catalogs in sync with auth and API-key image providers',
     new_0_6_16_2: 'Chat commands gained reload-skills, web title updates, unknown slash passthrough, and a clean session-context API that omits tool calls and tool results',

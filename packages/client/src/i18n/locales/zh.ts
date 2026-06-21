@@ -2096,6 +2096,7 @@ export default {
     new_0_6_18_4: 'MCU 设备反馈更清楚：工具调用会优先显示在语音之上，音频不会过早标记任务完成，活跃设备登录更稳定，ONLINE/IP 长文本支持滚动',
     new_0_6_18_5: '语音和消息工作流新增自定义 HTTP TTS/STT 端点、音频转码、fork 消息操作、持久化 fork 标记，以及更清晰的上传错误',
     new_0_6_18_6: '桌面与 runtime 设置更安全：Windows PATH 注册支持 Unicode，支持发布 Hermes Agent 0.17.0 runtime，并补齐移动端 PWA 元数据和多项 profile/auth 恢复修复',
+    new_0_6_18_7: '各项细节的优化',
     new_0_6_17_1: '修复 Codex 和 Claude Code 的对话启动问题',
     new_0_6_16_1: 'Provider 设置会正确保存自定义 API mode，补齐 LongCat 预设，支持删除 v12 Provider，并让模型目录同步认证和 API-key 图像 Provider',
     new_0_6_16_2: '聊天命令新增 reload-skills、网页标题更新、未知斜杠命令透传，以及去掉 tool call 和 tool result 的干净 session context 接口',
