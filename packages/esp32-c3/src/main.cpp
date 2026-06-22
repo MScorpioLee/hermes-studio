@@ -61,8 +61,10 @@ constexpr uint32_t kMcuAudioDefaultDurationMs = 1800;
 constexpr uint32_t kMcuAudioMaxDurationMs = 9000;
 constexpr uint32_t kMcuAudioHttpTimeoutMs = 30000;
 constexpr uint32_t kBootDebounceMs = 80;
+constexpr uint32_t kBootInputArmDelayMs = 2500;
 constexpr uint32_t kBootLongPressMs = 360;
 constexpr uint32_t kBootDoubleClickMs = 320;
+constexpr uint32_t kWifiDisconnectGraceMs = 8000;
 constexpr uint32_t kVoiceRecordMs = 4000;
 constexpr uint32_t kVoiceStreamRecordMs = 10000;
 constexpr uint32_t kVoiceRecordMinMs = 300;
@@ -102,6 +104,7 @@ bool es8311Ready = false;
 bool bootWasPressed = false;
 bool bootLongPressHandled = false;
 bool bootClickPending = false;
+bool bootInputArmed = false;
 uint32_t lastOledAtMs = 0;
 uint32_t restartAtMs = 0;
 uint32_t lastLanDiscoveryAtMs = 0;
@@ -110,7 +113,9 @@ uint32_t lastMcuSocketConnectAtMs = 0;
 uint32_t lastBootButtonAtMs = 0;
 uint32_t bootPressedAtMs = 0;
 uint32_t bootClickPendingAtMs = 0;
+uint32_t bootReleaseStartedAtMs = 0;
 uint32_t audioInterruptPressStartedAtMs = 0;
+uint32_t wifiDisconnectedSinceMs = 0;
 uint8_t oledProgress = 0;
 String oledTitle = "BOOT";
 String oledHint = "starting";
@@ -1083,6 +1088,7 @@ void shapePcmBuffer(uint8_t *buffer, size_t length) {
 bool shouldInterruptAudioForVoice() {
   bool pressed = digitalRead(kPinBoot) == LOW;
   uint32_t now = millis();
+  if (!bootInputArmed) return false;
   if (!pressed) {
     if (audioInterruptPressStartedAtMs != 0 &&
         now - audioInterruptPressStartedAtMs >= kBootDebounceMs &&
@@ -3615,6 +3621,26 @@ void handleBootButton() {
   bool bootPressed = digitalRead(kPinBoot) == LOW;
   uint32_t now = millis();
 
+  if (!bootInputArmed) {
+    bootWasPressed = false;
+    bootLongPressHandled = false;
+    bootClickPending = false;
+    audioInterruptPressStartedAtMs = 0;
+    if (now < kBootInputArmDelayMs || bootPressed) {
+      bootReleaseStartedAtMs = 0;
+      return;
+    }
+    if (bootReleaseStartedAtMs == 0) {
+      bootReleaseStartedAtMs = now;
+      return;
+    }
+    if (now - bootReleaseStartedAtMs < kBootDebounceMs) return;
+    bootInputArmed = true;
+    lastBootButtonAtMs = now;
+    Serial.println(F("BOOT button armed after startup release"));
+    return;
+  }
+
   if (bootPressed && !bootWasPressed && now - lastBootButtonAtMs > kBootDebounceMs) {
     bootWasPressed = true;
     bootLongPressHandled = false;
@@ -3967,6 +3993,7 @@ bool connectWifiCredentials(const String &ssid, const String &pass, wifi_mode_t 
 
   wifiReady = WiFi.status() == WL_CONNECTED;
   if (wifiReady) {
+    wifiDisconnectedSinceMs = 0;
     if (mode == WIFI_STA) setupApMode = false;
     connectMcuSocketClient();
     setOledStatus(OledMode::Ready, F("ONLINE"), WiFi.localIP().toString(), 100);
@@ -4216,8 +4243,21 @@ void loop() {
   }
 
   if (wifiReady && WiFi.status() != WL_CONNECTED) {
-    setOledStatus(OledMode::Error, F("WIFI"), F("LOST"), 0);
-    delay(500);
-    startSetupAp();
+    uint32_t now = millis();
+    if (wifiDisconnectedSinceMs == 0) {
+      wifiDisconnectedSinceMs = now;
+      setOledStatus(OledMode::Think, F("WIFI"), F("RECONNECT"), 60);
+      Serial.printf("WiFi disconnected status=%d, waiting %lu ms before setup AP\n",
+                    static_cast<int>(WiFi.status()),
+                    static_cast<unsigned long>(kWifiDisconnectGraceMs));
+      WiFi.reconnect();
+    } else if (now - wifiDisconnectedSinceMs >= kWifiDisconnectGraceMs) {
+      setOledStatus(OledMode::Error, F("WIFI"), F("LOST"), 0);
+      delay(500);
+      wifiDisconnectedSinceMs = 0;
+      startSetupAp();
+    }
+  } else if (wifiReady) {
+    wifiDisconnectedSinceMs = 0;
   }
 }
