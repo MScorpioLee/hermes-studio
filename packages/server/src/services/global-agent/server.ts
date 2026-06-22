@@ -482,7 +482,6 @@ export class GlobalAgentServer {
     if (!socket) return false
     const event = typeof payload.type === 'string' && payload.type.trim() ? payload.type.trim() : 'mcu.event'
     socket.emit(event, payload)
-    socket.broadcast.emit('relay.socket.event', { clientId: this.clientIdForSocket(socket), payload })
     return true
   }
 
@@ -1053,7 +1052,6 @@ export class GlobalAgentServer {
       : { type: event, payload }
     this.handleMcuClientEvent(clientId, event, body)
     this.emitFrontendBridgeEvent(clientId, body)
-    this.clients.get(clientId)?.broadcast.emit('relay.socket.event', { clientId, payload: body })
   }
 
   private mcuSessionId(clientId: string | undefined, profile: string): string {

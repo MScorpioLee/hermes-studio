@@ -378,7 +378,7 @@ describe('GlobalAgentServer', () => {
     expect(server.getClientIds()).toEqual(['device-1'])
   })
 
-  it('pushes MCU events to the selected agent socket and forwards MCU status events', async () => {
+  it('pushes MCU events only to the selected agent socket and forwards MCU status events to frontends', async () => {
     authMocks.authenticateUserToken.mockResolvedValue({ id: 7, username: 'ada', role: 'user' })
     authMocks.userCanAccessProfile.mockReturnValue(true)
     const nsp = createMockNamespace()
@@ -399,6 +399,17 @@ describe('GlobalAgentServer', () => {
     })
     nsp.__handlers.get('connection')?.(agentSocket)
 
+    const otherAgentSocket = createMockSocket('jwt-agent-socket-2', {
+      token: 'user-jwt',
+      role: 'hermes-studio',
+      instanceId: 'device-2',
+      profile: 'research',
+    })
+    await new Promise<void>((resolve, reject) => {
+      nsp.__middleware[0](otherAgentSocket, (err?: Error) => err ? reject(err) : resolve())
+    })
+    nsp.__handlers.get('connection')?.(otherAgentSocket)
+
     expect(server.emitMcuEvent({
       type: 'audio.enqueue',
       interactionId: 'voice-1',
@@ -411,19 +422,15 @@ describe('GlobalAgentServer', () => {
       segmentId: 'voice-1-tts-1',
       url: 'http://127.0.0.1/audio.pcm',
     })
+    expect(otherAgentSocket.emit).not.toHaveBeenCalledWith('audio.enqueue', expect.anything())
+    expect(agentSocket.broadcast.emit).not.toHaveBeenCalled()
 
     agentSocket.__handlers.get('audio.queued')?.({
       interactionId: 'voice-1',
       segmentId: 'voice-1-tts-1',
     })
-    expect(agentSocket.broadcast.emit).toHaveBeenCalledWith('relay.socket.event', {
-      clientId: 'device-1',
-      payload: {
-        type: 'audio.queued',
-        interactionId: 'voice-1',
-        segmentId: 'voice-1-tts-1',
-      },
-    })
+    expect(agentSocket.broadcast.emit).not.toHaveBeenCalled()
+    expect(otherAgentSocket.emit).not.toHaveBeenCalledWith('relay.socket.event', expect.anything())
   })
 
   it('keeps MCU voice stream in listening state until the upload is ended', async () => {
