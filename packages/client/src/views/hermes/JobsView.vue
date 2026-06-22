@@ -99,7 +99,7 @@ function arrowIcon(field: 'time' | 'name'): string {
                 {{ t('jobs.sortByName') }} <span class="sort-arrow">{{ arrowIcon('name') }}</span>
               </NButton>
             </template>
-            {{ sortBy === 'name' ? (sortAsc ? t('jobs.sortAsc') : t('jobs.sortDesc')) : 'Click to sort by name' }}
+            {{ sortBy === 'name' ? (sortAsc ? t('jobs.sortAsc') : t('jobs.sortDesc')) : t('jobs.sortByNameHint') }}
           </NTooltip>
           <NTooltip>
             <template #trigger>
@@ -111,7 +111,7 @@ function arrowIcon(field: 'time' | 'name'): string {
                 {{ t('jobs.sortByTime') }} <span class="sort-arrow">{{ arrowIcon('time') }}</span>
               </NButton>
             </template>
-            {{ sortBy === 'time' ? (sortAsc ? t('jobs.sortAsc') : t('jobs.sortDesc')) : 'Click to sort by time' }}
+            {{ sortBy === 'time' ? (sortAsc ? t('jobs.sortAsc') : t('jobs.sortDesc')) : t('jobs.sortByTimeHint') }}
           </NTooltip>
         </div>
         <span class="sort-divider"></span>

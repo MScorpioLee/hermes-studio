@@ -749,6 +749,8 @@ export default {
     sortBy: 'Sort',
     sortByName: 'Name Sort',
     sortByTime: 'Time Sort',
+    sortByNameHint: 'Click to sort by name',
+    sortByTimeHint: 'Click to sort by time',
     sortAsc: 'Ascending',
     sortDesc: 'Descending',
     name: 'Name',
