@@ -818,6 +818,12 @@ export default {
   // 技能
   skills: {
     title: '技能',
+    targetFilter: '執行環境',
+    targets: {
+      hermes: 'Hermes',
+      claude: 'Claude',
+      codex: 'Codex',
+    },
     searchPlaceholder: '搜尋技能...',
     noMatch: '沒有符合的技能',
     noSkills: '目前無技能',

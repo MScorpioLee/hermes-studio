@@ -682,6 +682,12 @@ export default {
   // 스킬
   skills: {
     title: '스킬',
+    targetFilter: '런타임',
+    targets: {
+      hermes: 'Hermes',
+      claude: 'Claude',
+      codex: 'Codex',
+    },
     searchPlaceholder: '스킬 검색...',
     noMatch: '검색과 일치하는 스킬이 없습니다',
     noSkills: '스킬을 찾을 수 없습니다',

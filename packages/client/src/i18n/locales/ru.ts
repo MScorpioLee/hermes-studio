@@ -722,6 +722,12 @@ export default {
 
   skills: {
     title: 'Навыки',
+    targetFilter: 'Среда',
+    targets: {
+      hermes: 'Hermes',
+      claude: 'Claude',
+      codex: 'Codex',
+    },
     searchPlaceholder: 'Поиск навыков...',
     noMatch: 'Нет подходящих навыков',
     noSkills: 'Нет навыков',

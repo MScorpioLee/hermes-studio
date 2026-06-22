@@ -682,6 +682,12 @@ jobTriggered: 'Job declenche',
   // Skills
   skills: {
     title: 'Competences',
+    targetFilter: 'Runtime',
+    targets: {
+      hermes: 'Hermes',
+      claude: 'Claude',
+      codex: 'Codex',
+    },
     searchPlaceholder: 'Rechercher des competences...',
     noMatch: 'Aucune competence ne correspond a votre recherche',
     noSkills: 'Aucune competence trouvee',

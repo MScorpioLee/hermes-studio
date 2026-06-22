@@ -682,6 +682,12 @@ jobTriggered: 'Job acionado',
   // Skills
   skills: {
     title: 'Habilidades',
+    targetFilter: 'Runtime',
+    targets: {
+      hermes: 'Hermes',
+      claude: 'Claude',
+      codex: 'Codex',
+    },
     searchPlaceholder: 'Buscar habilidades...',
     noMatch: 'Nenhuma habilidade corresponde a sua busca',
     noSkills: 'Nenhuma habilidade encontrada',

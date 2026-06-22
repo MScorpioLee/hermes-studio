@@ -682,6 +682,12 @@ jobTriggered: 'Job ausgelost',
   // Skills
   skills: {
     title: 'Fahigkeiten',
+    targetFilter: 'Runtime',
+    targets: {
+      hermes: 'Hermes',
+      claude: 'Claude',
+      codex: 'Codex',
+    },
     searchPlaceholder: 'Fahigkeiten suchen...',
     noMatch: 'Keine Fahigkeiten entsprechen Ihrer Suche',
     noSkills: 'Keine Fahigkeiten gefunden',

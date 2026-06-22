@@ -818,6 +818,12 @@ export default {
   // Skills
   skills: {
     title: 'Skills',
+    targetFilter: 'Runtime',
+    targets: {
+      hermes: 'Hermes',
+      claude: 'Claude',
+      codex: 'Codex',
+    },
     searchPlaceholder: 'Search skills...',
     noMatch: 'No skills match your search',
     noSkills: 'No skills found',

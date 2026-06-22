@@ -682,6 +682,12 @@ export default {
   // スキル
   skills: {
     title: 'スキル',
+    targetFilter: 'ランタイム',
+    targets: {
+      hermes: 'Hermes',
+      claude: 'Claude',
+      codex: 'Codex',
+    },
     searchPlaceholder: 'スキルを検索...',
     noMatch: '検索に一致するスキルがありません',
     noSkills: 'スキルがありません',

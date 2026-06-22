@@ -818,6 +818,12 @@ export default {
   // 技能
   skills: {
     title: '技能',
+    targetFilter: '运行时',
+    targets: {
+      hermes: 'Hermes',
+      claude: 'Claude',
+      codex: 'Codex',
+    },
     searchPlaceholder: '搜索技能...',
     noMatch: '没有匹配的技能',
     noSkills: '暂无技能',
