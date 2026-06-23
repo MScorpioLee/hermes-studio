@@ -1,37 +1,147 @@
 #!/bin/bash
 
-FILE_PATH="${TRIM_APPDEST}/docker/docker-compose.yaml"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_DIR="${TRIM_APPDEST:-$(cd "${SCRIPT_DIR}/../app" && pwd)}"
+VAR_DIR="${TRIM_PKGVAR:-${APP_DIR}/var}"
+RUN_DIR="${VAR_DIR}/run"
+LOG_DIR="${VAR_DIR}/log"
+PID_FILE="${RUN_DIR}/hermes-studio.pid"
+LOG_FILE="${LOG_DIR}/hermes-studio.log"
+PORT_VALUE="${TRIM_SERVICE_PORT:-6060}"
 
-is_docker_running () {
-    DOCKER_NAME=""
+NODE_BIN="${APP_DIR}/runtime/node/bin/node"
+PYTHON_HOME="${APP_DIR}/runtime/python"
+PYTHON_BIN="${PYTHON_HOME}/bin/python3"
+HERMES_BIN_VALUE="${PYTHON_HOME}/bin/hermes"
+SERVER_DIR="${APP_DIR}/server"
+SERVER_ENTRY="${SERVER_DIR}/dist/server/index.js"
 
-    if [ -f "$FILE_PATH" ]; then
-        DOCKER_NAME=$(grep "container_name" "$FILE_PATH" | awk -F ':' '{print $2}' | xargs)
+write_error() {
+    local message="$1"
+    if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then
+        echo "$message" > "${TRIM_TEMP_LOGFILE}"
+        if [ -f "$LOG_FILE" ]; then
+            tail -n 80 "$LOG_FILE" >> "${TRIM_TEMP_LOGFILE}" 2>/dev/null || true
+        fi
+    else
+        echo "$message" >&2
+    fi
+}
+
+prepare_dirs() {
+    mkdir -p "$RUN_DIR" "$LOG_DIR" \
+        "${VAR_DIR}/home" \
+        "${VAR_DIR}/hermes" \
+        "${VAR_DIR}/hermes-web-ui" \
+        "${VAR_DIR}/hermes-web-ui/upload"
+}
+
+read_pid() {
+    if [ -f "$PID_FILE" ]; then
+        cat "$PID_FILE"
+    fi
+}
+
+is_running() {
+    local pid
+    pid="$(read_pid)"
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+export_runtime_env() {
+    export HOME="${VAR_DIR}/home"
+    export NODE_ENV=production
+    export PORT="$PORT_VALUE"
+    export BIND_HOST=0.0.0.0
+    export HERMES_HOME="${VAR_DIR}/hermes"
+    export HERMES_WEB_UI_HOME="${VAR_DIR}/hermes-web-ui"
+    export HERMES_WEBUI_STATE_DIR="${VAR_DIR}/hermes-web-ui"
+    export UPLOAD_DIR="${VAR_DIR}/hermes-web-ui/upload"
+    export HERMES_BIN="$HERMES_BIN_VALUE"
+    export HERMES_AGENT_CLI_PYTHON="$PYTHON_BIN"
+    export HERMES_AGENT_BRIDGE_PYTHON="$PYTHON_BIN"
+    export HERMES_WEB_UI_MANAGED_GATEWAY=1
+    export HERMES_ALLOW_ROOT_GATEWAY=1
+    export PATH="${APP_DIR}/runtime/node/bin:${PYTHON_HOME}/bin:${PATH}"
+}
+
+start_app() {
+    if is_running; then
+        echo "Hermes Studio is already running"
+        exit 0
     fi
 
-    if [ -n "$DOCKER_NAME" ]; then
-        docker inspect "$DOCKER_NAME" | grep -q "\"Status\": \"running\","
-        return $?
+    prepare_dirs
+
+    if [ ! -x "$NODE_BIN" ]; then
+        write_error "Node runtime missing or not executable: $NODE_BIN"
+        exit 1
+    fi
+    if [ ! -x "$PYTHON_BIN" ]; then
+        write_error "Python runtime missing or not executable: $PYTHON_BIN"
+        exit 1
+    fi
+    if [ ! -f "$SERVER_ENTRY" ]; then
+        write_error "Hermes Studio server entry missing: $SERVER_ENTRY"
+        exit 1
     fi
 
-    return 1
+    export_runtime_env
+
+    cd "$SERVER_DIR" || exit 1
+    nohup "$NODE_BIN" "$SERVER_ENTRY" >> "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+    sleep 2
+
+    if is_running; then
+        echo "Hermes Studio started on port ${PORT_VALUE}"
+        exit 0
+    fi
+
+    rm -f "$PID_FILE"
+    write_error "Hermes Studio failed to start. Check ${LOG_FILE}"
+    exit 1
+}
+
+stop_app() {
+    local pid
+    pid="$(read_pid)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+                rm -f "$PID_FILE"
+                echo "Hermes Studio stopped"
+                exit 0
+            fi
+            sleep 1
+        done
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+
+    rm -f "$PID_FILE"
+    echo "Hermes Studio is not running"
+    exit 0
 }
 
 case $1 in
 start)
-    # Docker applications are started by appcenter.
-    exit 0
+    start_app
     ;;
 stop)
-    # Docker applications are stopped by appcenter.
-    exit 0
+    stop_app
     ;;
 status)
-    if is_docker_running; then
+    if is_running; then
+        echo "Hermes Studio is running"
         exit 0
     else
+        echo "Hermes Studio is not running"
         exit 3
     fi
+    ;;
+log)
+    tail -n "${2:-100}" "$LOG_FILE"
     ;;
 *)
     exit 1

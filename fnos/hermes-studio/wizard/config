@@ -4,7 +4,7 @@
     "items": [
       {
         "type": "tips",
-        "helpText": "Edit Docker environment variables from the fnOS Docker project if you need custom provider endpoints, callback ports, or proxy settings."
+        "helpText": "Use the application data directory for persistent Hermes profiles, credentials, uploads, logs, and Web UI state. Restart the app after changing runtime environment settings."
       }
     ]
   }
