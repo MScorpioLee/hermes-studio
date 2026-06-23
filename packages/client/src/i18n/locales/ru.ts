@@ -516,6 +516,12 @@ export default {
 
   workflow: {
     title: 'Рабочий процесс',
+    namePlaceholder: 'Название рабочего процесса',
+    workspace: {
+      title: 'Выбрать рабочую область',
+      select: 'Выбрать рабочую область',
+      clear: 'Очистить рабочую область',
+    },
     actions: {
       addNode: 'Добавить узел',
       reset: 'Сбросить',
@@ -525,8 +531,11 @@ export default {
     node: {
       agent: 'Agent',
       model: 'Модель',
+      apiMode: 'Режим API',
       input: 'Ввод',
       promptPlaceholder: 'Опишите, что должен сделать этот Agent...',
+      skillsPlaceholder: 'Skills, Enter для добавления',
+      uploadImages: 'Загрузить изображения',
     },
     inspector: {
       selected: 'Выбранный узел',
@@ -918,6 +927,8 @@ export default {
   models: {
     title: 'Модели',
     searchPlaceholder: 'Поиск моделей...',
+    noResults: 'Нет результатов',
+    noModels: 'Нет моделей',
     addProvider: 'Добавить провайдера',
     refreshModelCache: 'Обновить кеш моделей',
     refreshModelCacheLoading: 'Обновление кеша моделей...',

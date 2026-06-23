@@ -611,6 +611,12 @@ export default {
 
   workflow: {
     title: '工作流',
+    namePlaceholder: '工作流名稱',
+    workspace: {
+      title: '選擇工作區',
+      select: '選擇工作區',
+      clear: '清空工作區',
+    },
     actions: {
       addNode: '新增節點',
       reset: '重置',
@@ -620,8 +626,11 @@ export default {
     node: {
       agent: 'Agent',
       model: '模型',
+      apiMode: 'API 模式',
       input: '輸入',
       promptPlaceholder: '描述這個 Agent 要做什麼...',
+      skillsPlaceholder: '技能，按 Enter 新增',
+      uploadImages: '上傳圖片',
     },
     inspector: {
       selected: '選中節點',
@@ -1054,6 +1063,8 @@ export default {
   models: {
     title: '模型',
     searchPlaceholder: '搜尋模型...',
+    noResults: '無結果',
+    noModels: '無模型',
     addProvider: '新增 Provider',
     refreshModelCache: '刷新模型快取',
     refreshModelCacheLoading: '正在刷新模型快取...',

@@ -1002,6 +1002,8 @@ export default {
     visibilityHint: 'Web UI의 모델 선택기와 모델 페이지 표시에만 영향을 줍니다. Hermes CLI의 provider/model 설정은 변경되지 않으며 실제 호출은 원본 모델 ID를 사용합니다.',
     showAllModels: '모든 모델 표시',
     searchPlaceholder: '모델 검색...',
+    noResults: '결과 없음',
+    noModels: '모델 없음',
     removeCustomModel: '목록에 없는 이 모델 제거',
     refresh: '모델 목록 새로고침 (config.yaml 다시 불러오기)',
     more: '개 더',
@@ -2011,6 +2013,12 @@ export default {
   },
   workflow: {
     title: '워크플로',
+    namePlaceholder: '워크플로 이름',
+    workspace: {
+      title: '작업 공간 선택',
+      select: '작업 공간 선택',
+      clear: '작업 공간 지우기',
+    },
     actions: {
       addNode: '노드 추가',
       reset: '재설정',
@@ -2020,8 +2028,11 @@ export default {
     node: {
       agent: 'Agent',
       model: '모델',
+      apiMode: 'API 모드',
       input: '입력',
       promptPlaceholder: '이 Agent가 수행할 작업을 설명하세요...',
+      skillsPlaceholder: '스킬, Enter로 추가',
+      uploadImages: '이미지 업로드',
     },
     inspector: {
       selected: '선택한 노드',

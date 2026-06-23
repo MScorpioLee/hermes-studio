@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { NButton, NDropdown, type DropdownOption } from 'naive-ui'
+import { NButton, NDropdown, NInput, NModal, NSpace, type DropdownOption } from 'naive-ui'
 import {
   ConnectionLineType,
   MarkerType,
@@ -13,13 +13,17 @@ import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import { useI18n } from 'vue-i18n'
 import WorkflowAgentNode from '@/components/hermes/workflow/WorkflowAgentNode.vue'
+import FolderPicker from '@/components/hermes/chat/FolderPicker.vue'
 import { useAppStore } from '@/stores/hermes/app'
+import { uploadFiles } from '@/api/hermes/files'
+import { inferCodingAgentApiMode, normalizeCodingAgentApiMode } from '@/api/coding-agents'
 import type {
   WorkflowAgentNodeData,
   WorkflowAgentNodeEditableData,
   WorkflowNodeStatus,
   WorkflowSelectOption,
 } from '@/components/hermes/workflow/types'
+import type { AvailableModelGroup } from '@/api/hermes/system'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -56,36 +60,30 @@ const contextMenuX = ref(0)
 const contextMenuY = ref(0)
 const contextMenuOpenedAt = ref(0)
 const contextMenuTarget = ref<{ type: 'node' | 'edge'; id: string } | null>(null)
+const workflowName = ref(t('workflow.title'))
+const workflowWorkspace = ref<string | null>(null)
+const workspaceModalVisible = ref(false)
 
 const agentOptions = computed<WorkflowSelectOption[]>(() => [
-  { label: 'hermes', value: 'hermes' },
-  { label: 'claude', value: 'claude' },
-  { label: 'codex', value: 'codex' },
+  { label: 'Hermes', value: 'hermes' },
+  { label: 'Claude Code', value: 'claude-code' },
+  { label: 'Codex', value: 'codex' },
 ])
 
-const fallbackModelOptions = computed<WorkflowSelectOption[]>(() => [
-  { label: t('workflow.models.default'), value: 'default' },
-  { label: t('workflow.models.fast'), value: 'fast' },
-  { label: t('workflow.models.reasoning'), value: 'reasoning' },
-])
+const modelGroups = computed<AvailableModelGroup[]>(() => appStore.modelGroups)
 
-const modelOptions = computed<WorkflowSelectOption[]>(() => {
-  const loaded = appStore.modelGroups.flatMap(group =>
-    group.models.map(model => ({
-      label: `${group.label} / ${appStore.displayModelName(model, group.provider)}`,
-      value: `${group.provider}:${model}`,
-    })),
-  )
-
-  if (loaded.length === 0) return fallbackModelOptions.value
-  return loaded
-})
-
-const defaultModelValue = computed(() => {
-  if (appStore.selectedProvider && appStore.selectedModel) {
-    return `${appStore.selectedProvider}:${appStore.selectedModel}`
+const defaultModelSelection = computed(() => {
+  const selectedGroup = appStore.selectedProvider
+    ? modelGroups.value.find(group => group.provider === appStore.selectedProvider)
+    : undefined
+  if (selectedGroup?.models.includes(appStore.selectedModel)) {
+    return { provider: appStore.selectedProvider, model: appStore.selectedModel }
   }
-  return modelOptions.value[0]?.value || 'default'
+  const fallbackGroup = modelGroups.value.find(group => group.models.length > 0)
+  return {
+    provider: fallbackGroup?.provider || '',
+    model: fallbackGroup?.models[0] || '',
+  }
 })
 
 const contextMenuOptions = computed<DropdownOption[]>(() => {
@@ -106,16 +104,21 @@ function makeNode(
     type: 'agent',
     position,
     dragHandle: '.node-header',
-    style: { width: '260px', height: '240px' },
+    style: { width: '280px', height: '420px' },
     data: {
       title,
       agent: data.agent || agentOptions.value[0]?.value || 'hermes',
-      model: data.model || defaultModelValue.value,
-      prompt: data.prompt || '',
+      provider: data.provider || defaultModelSelection.value.provider,
+      model: data.model || defaultModelSelection.value.model,
+      apiMode: data.apiMode || defaultApiMode(data.provider || defaultModelSelection.value.provider),
+      input: data.input || '',
+      skills: data.skills || [],
+      images: data.images || [],
       status: data.status || 'idle',
       agentOptions: agentOptions.value,
-      modelOptions: modelOptions.value,
+      modelGroups: modelGroups.value,
       onUpdate: updateNodeData,
+      onUploadImages: uploadNodeImages,
     },
   }
 }
@@ -125,17 +128,17 @@ function makeInitialNodes(): WorkflowNode[] {
     makeNode('agent-1', t('workflow.initialNodes.node1'), { x: 40, y: 120 }, {
       agent: 'hermes',
       status: 'ready',
-      prompt: t('workflow.initialPrompts.node1'),
+      input: t('workflow.initialPrompts.node1'),
     }),
     makeNode('agent-2', t('workflow.initialNodes.node2'), { x: 390, y: 120 }, {
-      agent: 'claude',
+      agent: 'claude-code',
       status: 'running',
-      prompt: t('workflow.initialPrompts.node2'),
+      input: t('workflow.initialPrompts.node2'),
     }),
     makeNode('agent-3', t('workflow.initialNodes.node3'), { x: 740, y: 120 }, {
       agent: 'codex',
       status: 'idle',
-      prompt: t('workflow.initialPrompts.node3'),
+      input: t('workflow.initialPrompts.node3'),
     }),
   ]
 }
@@ -163,27 +166,59 @@ const edges = ref<WorkflowEdge[]>([
   },
 ])
 
-watch([agentOptions, modelOptions], () => {
+watch([agentOptions, modelGroups], () => {
   nodes.value = nodes.value.map<WorkflowNode>(node => ({
     ...node,
     data: {
       ...node.data,
       agentOptions: agentOptions.value,
-      modelOptions: modelOptions.value,
-      model: modelOptions.value.some(option => option.value === node.data.model)
-        ? node.data.model
-        : defaultModelValue.value,
+      modelGroups: modelGroups.value,
+      ...normalizeNodeModel(node.data),
       onUpdate: updateNodeData,
+      onUploadImages: uploadNodeImages,
     },
   }))
 })
 
+function defaultApiMode(provider: string) {
+  const group = modelGroups.value.find(item => item.provider === provider)
+  return normalizeCodingAgentApiMode(
+    group?.api_mode,
+    inferCodingAgentApiMode(group?.provider || provider, group?.base_url),
+  )
+}
+
+function normalizeNodeModel(data: WorkflowAgentNodeData): Pick<WorkflowAgentNodeData, 'provider' | 'model' | 'apiMode'> {
+  const currentGroup = modelGroups.value.find(group => group.provider === data.provider)
+  if (currentGroup?.models.includes(data.model)) {
+    return { provider: data.provider, model: data.model, apiMode: data.apiMode || defaultApiMode(data.provider) }
+  }
+  return {
+    provider: defaultModelSelection.value.provider,
+    model: defaultModelSelection.value.model,
+    apiMode: defaultApiMode(defaultModelSelection.value.provider),
+  }
+}
+
 function updateNodeData(id: string, patch: Partial<WorkflowAgentNodeEditableData>) {
   nodes.value = nodes.value.map<WorkflowNode>(node => (
     node.id === id
-      ? { ...node, data: { ...node.data, ...patch } }
+      ? {
+          ...node,
+          style: patch.images ? expandNodeHeightForImages(node.style, patch.images.length) : node.style,
+          data: { ...node.data, ...patch },
+        }
       : node
   ))
+}
+
+function expandNodeHeightForImages(style: WorkflowNode['style'], imageCount: number): WorkflowNode['style'] {
+  if (imageCount <= 0) return style
+  const currentHeight = Number.parseFloat(style.height || '420')
+  const previewRows = Math.min(2, Math.ceil(imageCount / 3))
+  const requiredHeight = 420 + previewRows * 68
+  if (currentHeight >= requiredHeight) return style
+  return { ...style, height: `${requiredHeight}px` }
 }
 
 function handleConnect(connection: Connection) {
@@ -267,6 +302,11 @@ async function addAgentNode() {
   await fitView({ padding: 0.18, duration: 240 })
 }
 
+async function uploadNodeImages(nodeId: string, files: File[]) {
+  const uploaded = await uploadFiles(`workflow-uploads/${nodeId}`, files)
+  return uploaded.map(file => file.path)
+}
+
 async function resetWorkflow() {
   nodes.value = makeInitialNodes()
   edges.value = edges.value.slice(0, 2)
@@ -285,7 +325,17 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
 <template>
   <div class="workflow-view">
     <header class="page-header">
-      <h2 class="header-title">{{ t('workflow.title') }}</h2>
+      <div class="header-fields">
+        <NInput
+          v-model:value="workflowName"
+          size="small"
+          class="workflow-name-input"
+          :placeholder="t('workflow.namePlaceholder')"
+        />
+        <NButton size="small" secondary @click="workspaceModalVisible = true">
+          {{ workflowWorkspace ? (workflowWorkspace.split('/').pop() || workflowWorkspace) : t('workflow.workspace.select') }}
+        </NButton>
+      </div>
       <div class="header-actions">
         <NButton size="small" @click="resetWorkflow">
           {{ t('workflow.actions.reset') }}
@@ -298,6 +348,24 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
         </NButton>
       </div>
     </header>
+    <NModal
+      v-model:show="workspaceModalVisible"
+      preset="card"
+      :title="t('workflow.workspace.title')"
+      :style="{ width: 'min(720px, calc(100vw - 32px))' }"
+    >
+      <FolderPicker v-model="workflowWorkspace" />
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="workflowWorkspace = null">
+            {{ t('workflow.workspace.clear') }}
+          </NButton>
+          <NButton type="primary" @click="workspaceModalVisible = false">
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
 
     <div class="workflow-body">
       <section class="workflow-canvas" aria-label="Workflow canvas">
@@ -345,6 +413,18 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.header-fields {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.workflow-name-input {
+  width: min(320px, 45vw);
 }
 
 .header-actions {
@@ -418,6 +498,15 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   .header-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+
+  .header-fields {
+    width: 100%;
+  }
+
+  .workflow-name-input {
+    flex: 1;
+    width: auto;
   }
 
   .workflow-body {

@@ -1002,6 +1002,8 @@ export default {
     visibilityHint: 'Web UI のモデル選択とモデルページの表示だけに影響します。Hermes CLI の provider/model 設定は変更されず、実際の呼び出しは元のモデル ID を使います。',
     showAllModels: 'すべてのモデルを表示',
     searchPlaceholder: 'モデルを検索...',
+    noResults: '結果なし',
+    noModels: 'モデルなし',
     removeCustomModel: 'この一覧外モデルを削除',
     refresh: 'モデルリストを更新（config.yaml を再読み込み）',
     more: '件追加',
@@ -2011,6 +2013,12 @@ export default {
   },
   workflow: {
     title: 'ワークフロー',
+    namePlaceholder: 'ワークフロー名',
+    workspace: {
+      title: 'ワークスペースを選択',
+      select: 'ワークスペースを選択',
+      clear: 'ワークスペースをクリア',
+    },
     actions: {
       addNode: 'ノードを追加',
       reset: 'リセット',
@@ -2020,8 +2028,11 @@ export default {
     node: {
       agent: 'Agent',
       model: 'モデル',
+      apiMode: 'API モード',
       input: '入力',
       promptPlaceholder: 'このAgentが行うことを記述...',
+      skillsPlaceholder: 'スキル、Enter で追加',
+      uploadImages: '画像をアップロード',
     },
     inspector: {
       selected: '選択中のノード',

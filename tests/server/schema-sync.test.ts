@@ -107,7 +107,19 @@ describe('Database Schema Synchronization', () => {
 
   describe('Normal initialization - fresh database creation', () => {
     it('creates all tables with correct schemas when database does not exist', async () => {
-      const { initAllHermesTables, USAGE_TABLE, USAGE_SCHEMA, SESSIONS_TABLE, SESSIONS_SCHEMA } =
+      const {
+        initAllHermesTables,
+        USAGE_TABLE,
+        USAGE_SCHEMA,
+        SESSIONS_TABLE,
+        SESSIONS_SCHEMA,
+        WORKFLOWS_TABLE,
+        WORKFLOWS_SCHEMA,
+        WORKFLOW_RUNS_TABLE,
+        WORKFLOW_RUNS_SCHEMA,
+        WORKFLOW_RUN_MESSAGES_TABLE,
+        WORKFLOW_RUN_MESSAGES_SCHEMA,
+      } =
         await import('../../packages/server/src/db/hermes/schemas')
 
       initAllHermesTables()
@@ -135,6 +147,34 @@ describe('Database Schema Synchronization', () => {
       expect(sessionsCols.has('source')).toBe(true)
       expect(sessionsCols.has('agent_session_id')).toBe(true)
       expect(sessionsCols.has('agent_native_session_id')).toBe(true)
+
+      // Verify workflow tables were created
+      expect(tableExists(db, WORKFLOWS_TABLE)).toBe(true)
+      const workflowCols = getTableColumns(db, WORKFLOWS_TABLE)
+      expect(workflowCols.size).toBe(Object.keys(WORKFLOWS_SCHEMA).length)
+      expect(workflowCols.has('name')).toBe(true)
+      expect(workflowCols.has('profile')).toBe(true)
+      expect(workflowCols.has('workspace')).toBe(true)
+      expect(workflowCols.has('nodes_json')).toBe(true)
+      expect(workflowCols.has('edges_json')).toBe(true)
+
+      expect(tableExists(db, WORKFLOW_RUNS_TABLE)).toBe(true)
+      const workflowRunCols = getTableColumns(db, WORKFLOW_RUNS_TABLE)
+      expect(workflowRunCols.size).toBe(Object.keys(WORKFLOW_RUNS_SCHEMA).length)
+      expect(workflowRunCols.has('workflow_id')).toBe(true)
+      expect(workflowRunCols.has('workspace')).toBe(true)
+      expect(workflowRunCols.has('start_node_ids_json')).toBe(true)
+      expect(workflowRunCols.has('snapshot_nodes_json')).toBe(true)
+      expect(workflowRunCols.has('snapshot_edges_json')).toBe(true)
+
+      expect(tableExists(db, WORKFLOW_RUN_MESSAGES_TABLE)).toBe(true)
+      const workflowRunMessageCols = getTableColumns(db, WORKFLOW_RUN_MESSAGES_TABLE)
+      expect(workflowRunMessageCols.size).toBe(Object.keys(WORKFLOW_RUN_MESSAGES_SCHEMA).length)
+      expect(workflowRunMessageCols.has('run_id')).toBe(true)
+      expect(workflowRunMessageCols.has('workflow_id')).toBe(true)
+      expect(workflowRunMessageCols.has('node_id')).toBe(true)
+      expect(workflowRunMessageCols.has('tool_calls')).toBe(true)
+      expect(workflowRunMessageCols.has('reasoning_content')).toBe(true)
     })
   })
 

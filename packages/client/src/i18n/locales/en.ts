@@ -611,6 +611,12 @@ export default {
 
   workflow: {
     title: 'Workflow',
+    namePlaceholder: 'Workflow name',
+    workspace: {
+      title: 'Select Workspace',
+      select: 'Select workspace',
+      clear: 'Clear workspace',
+    },
     actions: {
       addNode: 'Add Node',
       reset: 'Reset',
@@ -620,8 +626,11 @@ export default {
     node: {
       agent: 'Agent',
       model: 'Model',
+      apiMode: 'API Mode',
       input: 'Input',
       promptPlaceholder: 'Describe what this agent should do...',
+      skillsPlaceholder: 'Skills, press Enter to add',
+      uploadImages: 'Upload images',
     },
     inspector: {
       selected: 'Selected Node',
@@ -1054,6 +1063,8 @@ export default {
   models: {
     title: 'Models',
     searchPlaceholder: 'Search models...',
+    noResults: 'No results',
+    noModels: 'No models',
     addProvider: 'Add Provider',
     refreshModelCache: 'Refresh model cache',
     refreshModelCacheLoading: 'Refreshing model cache...',
