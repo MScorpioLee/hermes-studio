@@ -1,0 +1,75 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream main
+        id: sync
+        env:
+          UPSTREAM_REPO: EKKOLearnAI/hermes-studio
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch upstream main --tags
+
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
+            echo "Fork is already up to date with upstream/main."
+            exit 0
+          fi
+
+          git merge --no-edit upstream/main
+          version="$(node -p "require('./package.json').version")"
+          git push origin HEAD:main
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
+
+      - name: Build updated fnOS package
+        if: steps.sync.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run fnos-package.yml --ref main -f hermes_version=0.17.0
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "## Upstream sync"
+            echo ""
+            echo "- Changed: ${{ steps.sync.outputs.changed || 'false' }}"
+            echo "- Upstream SHA: ${{ steps.sync.outputs.upstream_sha }}"
+            if [ "${{ steps.sync.outputs.changed || 'false' }}" = "true" ]; then
+              echo "- Synced package version: ${{ steps.sync.outputs.version }}"
+              echo "- Triggered workflow: fnos-package.yml"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

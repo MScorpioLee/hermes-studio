@@ -13,7 +13,7 @@ The native package includes:
 - `app/runtime/python` - portable Python runtime with `hermes-agent`.
 - `cmd/main` - fnOS lifecycle script that starts `node dist/server/index.js`.
 
-The first native package target is `x86_64` / Linux x64.
+The first native package target is fnOS `platform = x86` / Linux x64.
 
 ## Local Build
 
@@ -28,6 +28,23 @@ FNPACK_BIN=/path/to/fnpack FNOS_TARGET_OS=linux FNOS_TARGET_ARCH=x64 npm run bui
 ```
 
 The output is written to `dist/fnos/hermes-studio.fpk`.
+
+## GitHub Updates
+
+The fork tracks upstream through `.github/workflows/sync-upstream.yml`. It runs
+every six hours and can also be started manually. When `upstream/main` has new
+commits, the workflow merges them into this fork's `main` branch and dispatches
+the native fnOS package build.
+
+The package workflow writes two files:
+
+- `dist/fnos/hermes-studio.fpk`
+- `dist/fnos/hermes-studio.latest.json`
+
+On a successful build, GitHub publishes both files to a release named
+`fnos-v<package.json version>`. This gives fnOS app stores or custom update
+checks a stable URL to poll. A manually installed `.fpk` still needs an app
+store/feed integration to show in-product update prompts inside fnOS.
 
 ## fnOS Runtime Paths
 

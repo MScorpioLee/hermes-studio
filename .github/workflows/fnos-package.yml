@@ -18,14 +18,12 @@ on:
         description: "hermes-agent version to bundle"
         required: false
         default: "0.17.0"
-  release:
-    types: [published]
 
 permissions:
   contents: write
 
 concurrency:
-  group: fnos-package-${{ github.event.release.tag_name || github.event.inputs.hermes_version || github.ref }}
+  group: fnos-package-${{ github.event.inputs.hermes_version || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -36,8 +34,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.release.tag_name || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -77,18 +73,76 @@ jobs:
           FNOS_TARGET_ARCH: x64
         run: npm run build:fnos
 
+      - name: Create fnOS release metadata
+        id: package_meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          release_tag="fnos-v${version}"
+          download_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}/hermes-studio.fpk"
+          cat > dist/fnos/hermes-studio.latest.json <<JSON
+          {
+            "appname": "hermes-studio",
+            "display_name": "Hermes Studio",
+            "version": "${version}",
+            "fpk_version": "${version}",
+            "release_tag": "${release_tag}",
+            "download_url": "${download_url}",
+            "source_repo": "https://github.com/EKKOLearnAI/hermes-studio",
+            "packaging_repo": "https://github.com/${GITHUB_REPOSITORY}",
+            "platforms": ["x86"],
+            "app_type": "native",
+            "service_port": 6060,
+            "built_from": "${GITHUB_SHA}",
+            "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          JSON
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+
       - name: Upload fnOS package artifact
         uses: actions/upload-artifact@v4
         with:
           name: hermes-studio-fnos
-          path: dist/fnos/hermes-studio.fpk
+          path: |
+            dist/fnos/hermes-studio.fpk
+            dist/fnos/hermes-studio.latest.json
           if-no-files-found: error
 
-      - name: Upload fnOS package to release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.release.tag_name }}
-          make_latest: false
-          fail_on_unmatched_files: true
-          files: dist/fnos/hermes-studio.fpk
+      - name: Publish fnOS package release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.package_meta.outputs.release_tag }}
+          VERSION: ${{ steps.package_meta.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes_file="$(mktemp)"
+          cat > "$notes_file" <<EOF
+          Native fnOS package for Hermes Studio ${VERSION}.
+
+          - App source: https://github.com/EKKOLearnAI/hermes-studio
+          - Packaging source: https://github.com/${GITHUB_REPOSITORY}
+          - Build run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          - Commit: ${GITHUB_SHA}
+          EOF
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release edit "${RELEASE_TAG}" \
+              --title "Hermes Studio fnOS ${VERSION}" \
+              --notes-file "$notes_file"
+          else
+            if ! git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+              git tag "${RELEASE_TAG}" "${GITHUB_SHA}"
+              git push origin "refs/tags/${RELEASE_TAG}"
+            fi
+            gh release create "${RELEASE_TAG}" \
+              --title "Hermes Studio fnOS ${VERSION}" \
+              --notes-file "$notes_file"
+          fi
+
+          gh release upload "${RELEASE_TAG}" \
+            dist/fnos/hermes-studio.fpk \
+            dist/fnos/hermes-studio.latest.json \
+            --clobber

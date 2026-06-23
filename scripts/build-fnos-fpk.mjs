@@ -16,8 +16,9 @@ const targetArch = process.env.FNOS_TARGET_ARCH?.trim() || 'x64'
 const fnpack = process.env.FNPACK_BIN?.trim() || 'fnpack'
 
 const sourceDir = path.join(root, 'fnos', packageName)
+const buildRoot = path.join(root, '.fnos-build')
 const outputDir = path.join(root, 'dist', 'fnos')
-const stageDir = path.join(outputDir, packageName)
+const stageDir = path.join(buildRoot, packageName)
 const outputFpk = path.join(outputDir, `${packageName}.fpk`)
 const platformLabel = `${targetOS}-${targetArch}`
 
@@ -88,16 +89,24 @@ async function buildWebUi() {
 
 async function copyServer() {
   const serverDir = path.join(stageDir, 'app', 'server')
+  const distDir = path.join(serverDir, 'dist')
   await rm(serverDir, { recursive: true, force: true })
   await mkdir(serverDir, { recursive: true })
+  await mkdir(distDir, { recursive: true })
 
   ensureDir(path.join(root, 'dist'))
+  ensureDir(path.join(root, 'dist', 'client'))
   ensureFile(path.join(root, 'dist', 'server', 'index.js'))
 
   await copyFile(path.join(root, 'package.json'), path.join(serverDir, 'package.json'))
   await copyFile(path.join(root, 'package-lock.json'), path.join(serverDir, 'package-lock.json'))
   await cp(path.join(root, 'bin'), path.join(serverDir, 'bin'), { recursive: true })
-  await cp(path.join(root, 'dist'), path.join(serverDir, 'dist'), { recursive: true })
+  for (const entry of ['client', 'server', 'skills', 'mcu']) {
+    const source = path.join(root, 'dist', entry)
+    if (existsSync(source)) {
+      await cp(source, path.join(distDir, entry), { recursive: true })
+    }
+  }
 
   run('npm', ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: serverDir })
   run('npm', ['rebuild', 'node-pty'], { cwd: serverDir })
@@ -128,8 +137,9 @@ if (targetOS !== osPlatform() || targetArch !== osArch()) {
   }
 }
 
-await rm(stageDir, { recursive: true, force: true })
+await rm(buildRoot, { recursive: true, force: true })
 await rm(outputFpk, { force: true })
+await mkdir(buildRoot, { recursive: true })
 await mkdir(outputDir, { recursive: true })
 await cp(sourceDir, stageDir, { recursive: true })
 await rm(path.join(stageDir, 'app', 'docker'), { recursive: true, force: true })
