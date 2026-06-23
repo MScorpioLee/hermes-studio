@@ -65,6 +65,26 @@ export_runtime_env() {
     export PATH="${APP_DIR}/runtime/node/bin:${PYTHON_HOME}/bin:${PATH}"
 }
 
+ensure_executable() {
+    local file_path="$1"
+    if [ ! -f "$file_path" ]; then
+        return 1
+    fi
+    chmod +x "$file_path" 2>/dev/null || true
+    [ -x "$file_path" ]
+}
+
+resolve_python() {
+    local candidate
+    for candidate in "${PYTHON_HOME}/bin/python3" "${PYTHON_HOME}/bin/python" "${PYTHON_HOME}/bin/python3.12"; do
+        if ensure_executable "$candidate"; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
 start_app() {
     if is_running; then
         echo "Hermes Studio is already running"
@@ -73,12 +93,20 @@ start_app() {
 
     prepare_dirs
 
-    if [ ! -x "$NODE_BIN" ]; then
+    if ! ensure_executable "$NODE_BIN"; then
         write_error "Node runtime missing or not executable: $NODE_BIN"
         exit 1
     fi
-    if [ ! -x "$PYTHON_BIN" ]; then
-        write_error "Python runtime missing or not executable: $PYTHON_BIN"
+
+    PYTHON_BIN="$(resolve_python)"
+    if [ -z "$PYTHON_BIN" ]; then
+        write_error "Python runtime missing or not executable: ${PYTHON_HOME}/bin/python3, ${PYTHON_HOME}/bin/python, or ${PYTHON_HOME}/bin/python3.12"
+        exit 1
+    fi
+
+    HERMES_BIN_VALUE="${PYTHON_HOME}/bin/hermes"
+    if ! ensure_executable "$HERMES_BIN_VALUE"; then
+        write_error "Hermes binary missing or not executable: $HERMES_BIN_VALUE"
         exit 1
     fi
     if [ ! -f "$SERVER_ENTRY" ]; then

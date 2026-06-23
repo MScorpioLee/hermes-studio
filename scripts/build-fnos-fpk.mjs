@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, cp, lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { arch as osArch, platform as osPlatform } from 'node:os'
@@ -125,7 +125,46 @@ async function copyRuntime() {
   await rm(runtimeDir, { recursive: true, force: true })
   await mkdir(runtimeDir, { recursive: true })
   await cp(nodeDir, path.join(runtimeDir, 'node'), { recursive: true, verbatimSymlinks: true })
-  await cp(pythonDir, path.join(runtimeDir, 'python'), { recursive: true, verbatimSymlinks: true })
+  await cp(pythonDir, path.join(runtimeDir, 'python'), { recursive: true, verbatimSymlinks: false })
+
+  const stagePythonBin = path.join(runtimeDir, 'python', 'bin')
+  await materializeSymlinkedPythonBinary(stagePythonBin, 'python3', 'python3.12')
+  await materializeSymlinkedPythonBinary(stagePythonBin, 'python', 'python3.12')
+
+  const runtimeNode = path.join(runtimeDir, 'node', 'bin', 'node')
+  const runtimePython = path.join(runtimeDir, 'python', 'bin', 'python3')
+  const runtimeHermes = path.join(runtimeDir, 'python', 'bin', 'hermes')
+  const runtimePythonAlt = path.join(runtimeDir, 'python', 'bin', 'python')
+
+  await Promise.all([runFile(runtimeNode), runFile(runtimePython), runFile(runtimeHermes), runFile(runtimePythonAlt)])
+}
+
+async function materializeSymlinkedPythonBinary(dir, binaryName, targetName) {
+  const binaryPath = path.join(dir, binaryName)
+  if (!existsSync(binaryPath)) return
+
+  let st
+  try {
+    st = await lstat(binaryPath)
+  } catch {
+    return
+  }
+
+  if (st.isSymbolicLink()) {
+    const targetPath = path.resolve(dir, targetName)
+    await rm(binaryPath, { force: true })
+    await cp(targetPath, binaryPath, { force: true })
+  }
+}
+
+async function runFile(binaryPath) {
+  if (await fileExists(binaryPath)) {
+    await run('chmod', ['+x', binaryPath])
+  }
+}
+
+async function fileExists(filePath) {
+  return existsSync(filePath)
 }
 
 if (targetOS !== osPlatform() || targetArch !== osArch()) {
