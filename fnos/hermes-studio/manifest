@@ -1,0 +1,15 @@
+appname               = hermes-studio
+version               = 0.6.19
+display_name          = Hermes Studio
+desc                  = Web dashboard and local runtime for Hermes Agent.
+arch                  = x86_64
+source                = thirdparty
+maintainer            = MScorpioLee
+maintainer_url        = https://github.com/MScorpioLee/hermes-studio
+distributor           = MScorpioLee
+distributor_url       = https://github.com/MScorpioLee/hermes-studio
+desktop_uidir         = ui
+desktop_applaunchname = hermes-studio.Application
+service_port          = 6060
+checkport             = false
+checksum              =

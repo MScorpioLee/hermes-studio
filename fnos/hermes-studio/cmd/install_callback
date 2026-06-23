@@ -1,0 +1,5 @@
+#!/bin/bash
+
+mkdir -p "${TRIM_PKGVAR}/hermes" "${TRIM_PKGVAR}/hermes-web-ui" 2>/dev/null || true
+
+exit 0

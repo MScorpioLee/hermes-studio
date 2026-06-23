@@ -1,0 +1,11 @@
+[
+  {
+    "stepTitle": "Uninstall",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "Uninstalling removes the application package. Back up the application data directory first if you want to keep Hermes profiles, credentials, sessions, or Web UI state."
+      }
+    ]
+  }
+]

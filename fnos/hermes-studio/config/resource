@@ -1,0 +1,30 @@
+{
+  "docker-project": {
+    "projects": [
+      {
+        "name": "hermes-studio",
+        "path": "docker"
+      }
+    ]
+  },
+  "data-share": {
+    "shares": [
+      {
+        "name": "hermes-studio",
+        "permission": {
+          "rw": [
+            "docker-hermes-studio"
+          ]
+        }
+      },
+      {
+        "name": "hermes-studio/data",
+        "permission": {
+          "rw": [
+            "docker-hermes-studio"
+          ]
+        }
+      }
+    ]
+  }
+}

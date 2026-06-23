@@ -1,0 +1,14 @@
+{
+  ".url": {
+    "hermes-studio.Application": {
+      "title": "Hermes Studio",
+      "desc": "Hermes Studio",
+      "icon": "images/icon_{0}.png",
+      "type": "url",
+      "protocol": "http",
+      "port": "6060",
+      "url": "/",
+      "allUsers": true
+    }
+  }
+}

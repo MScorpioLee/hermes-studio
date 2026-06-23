@@ -1,0 +1,115 @@
+name: Build GHCR Image and fnOS Package
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/fnos-package.yml"
+      - "Dockerfile"
+      - "package.json"
+      - "package-lock.json"
+      - "bin/**"
+      - "fnos/**"
+      - "packages/**"
+      - "scripts/build-fnos-fpk.mjs"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Container image tag to publish and bake into the fpk"
+        required: false
+        default: latest
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: fnos-package-${{ github.event.release.tag_name || github.event.inputs.image_tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Resolve image metadata
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY,,}"
+          tag="${{ github.event.release.tag_name || github.event.inputs.image_tag || 'latest' }}"
+          image="ghcr.io/${repo}:${tag}"
+          echo "repo=${repo}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.image.outputs.image }}
+            ghcr.io/${{ steps.image.outputs.repo }}:${{ github.sha }}
+
+      - name: Download fnpack
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://static2.fnnas.com/fnpack/fnpack-1.2.1-linux-amd64 -o /tmp/fnpack
+          chmod +x /tmp/fnpack
+          /tmp/fnpack --help
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Build fnOS package
+        env:
+          FNPACK_BIN: /tmp/fnpack
+          FNOS_IMAGE: ${{ steps.image.outputs.image }}
+        run: npm run build:fnos
+
+      - name: Upload fnOS package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-studio-fnos
+          path: dist/fnos/hermes-studio.fpk
+          if-no-files-found: error
+
+      - name: Upload fnOS package to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          make_latest: false
+          fail_on_unmatched_files: true
+          files: dist/fnos/hermes-studio.fpk

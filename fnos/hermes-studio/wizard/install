@@ -1,0 +1,11 @@
+[
+  {
+    "stepTitle": "Install",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "Hermes Studio runs as a Docker app. It uses port 6060 by default and stores Hermes Agent data plus Web UI state in the application data directory. The default Web UI login is admin / 123456; change it after first login."
+      }
+    ]
+  }
+]
