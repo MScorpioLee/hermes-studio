@@ -1,3 +1,17 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/common"
+
+stop_all_processes
+
+case "${wizard_keep_data:-keep}" in
+delete|remove|false|no)
+    safe_clean_dir_contents "${TRIM_PKGVAR:-}"
+    safe_clean_dir_contents "${TRIM_PKGHOME:-}"
+    safe_clean_dir_contents "${TRIM_PKGETC:-}"
+    clean_data_share_paths
+    ;;
+esac
+
 exit 0

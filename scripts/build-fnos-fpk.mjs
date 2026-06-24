@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { copyFile, cp, lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, cp, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { arch as osArch, platform as osPlatform } from 'node:os'
@@ -80,6 +80,16 @@ async function syncIcons() {
   await mkdir(path.join(stageDir, 'app', 'ui', 'images'), { recursive: true })
   await copyFile(icon64, path.join(stageDir, 'app', 'ui', 'images', 'icon_64.png'))
   await copyFile(icon256, path.join(stageDir, 'app', 'ui', 'images', 'icon_256.png'))
+}
+
+async function makeCommandScriptsExecutable() {
+  const cmdDir = path.join(stageDir, 'cmd')
+  const entries = await readdir(cmdDir, { withFileTypes: true })
+  await Promise.all(
+    entries
+      .filter(entry => entry.isFile())
+      .map(entry => chmod(path.join(cmdDir, entry.name), 0o755)),
+  )
 }
 
 async function buildWebUi() {
@@ -184,6 +194,7 @@ await cp(sourceDir, stageDir, { recursive: true })
 await rm(path.join(stageDir, 'app', 'docker'), { recursive: true, force: true })
 
 await buildWebUi()
+await makeCommandScriptsExecutable()
 await syncIcons()
 await writePatchedManifest()
 await copyServer()

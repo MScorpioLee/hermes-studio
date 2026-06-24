@@ -1,5 +1,10 @@
 #!/bin/bash
 
-mkdir -p "${TRIM_PKGVAR}/hermes" "${TRIM_PKGVAR}/hermes-web-ui" 2>/dev/null || true
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/common"
+
+stop_all_processes
+prepare_dirs
+persist_runtime_config || exit 1
 
 exit 0

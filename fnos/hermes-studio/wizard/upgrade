@@ -1,10 +1,10 @@
 [
   {
-    "stepTitle": "Config",
+    "stepTitle": "Upgrade",
     "items": [
       {
         "type": "tips",
-        "helpText": "Use the application data directory for persistent Hermes profiles, credentials, uploads, logs, and Web UI state. If Hermes Studio is running, saving this configuration restarts it with the selected port."
+        "helpText": "Hermes Studio will stop existing Node.js and Python bridge processes before upgrading. Keep the current Web UI port unless you want to move the service."
       },
       {
         "type": "text",

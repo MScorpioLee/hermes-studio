@@ -1,3 +1,18 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/common"
+
+was_running=0
+if app_is_running; then
+    was_running=1
+fi
+
+persist_runtime_config || exit 1
+
+if [ "$was_running" -eq 1 ]; then
+    stop_all_processes
+    "${SCRIPT_DIR}/main" start || exit 1
+fi
+
 exit 0

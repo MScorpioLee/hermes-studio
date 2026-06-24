@@ -1,0 +1,229 @@
+#!/bin/bash
+
+APP_NAME="hermes-studio"
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+APP_DIR="${TRIM_APPDEST:-$(cd "${SCRIPT_DIR}/../app" && pwd)}"
+VAR_DIR="${TRIM_PKGVAR:-${APP_DIR}/var}"
+RUN_DIR="${VAR_DIR}/run"
+LOG_DIR="${VAR_DIR}/log"
+CONFIG_DIR="${VAR_DIR}/config"
+CONFIG_FILE="${CONFIG_DIR}/runtime.env"
+PID_FILE="${RUN_DIR}/hermes-studio.pid"
+LOG_FILE="${LOG_DIR}/hermes-studio.log"
+
+DEFAULT_PORT="${TRIM_SERVICE_PORT:-6060}"
+NODE_BIN="${APP_DIR}/runtime/node/bin/node"
+PYTHON_HOME="${APP_DIR}/runtime/python"
+PYTHON_BIN="${PYTHON_HOME}/bin/python3"
+HERMES_BIN_VALUE="${PYTHON_HOME}/bin/hermes"
+SERVER_DIR="${APP_DIR}/server"
+SERVER_ENTRY="${SERVER_DIR}/dist/server/index.js"
+PORT_VALUE="$DEFAULT_PORT"
+
+write_error() {
+    local message="$1"
+    if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then
+        echo "$message" > "${TRIM_TEMP_LOGFILE}"
+        if [ -f "$LOG_FILE" ]; then
+            tail -n 80 "$LOG_FILE" >> "${TRIM_TEMP_LOGFILE}" 2>/dev/null || true
+        fi
+    else
+        echo "$message" >&2
+    fi
+}
+
+prepare_dirs() {
+    mkdir -p "$RUN_DIR" "$LOG_DIR" "$CONFIG_DIR" \
+        "${VAR_DIR}/home" \
+        "${VAR_DIR}/hermes" \
+        "${VAR_DIR}/hermes-web-ui" \
+        "${VAR_DIR}/hermes-web-ui/upload"
+}
+
+is_valid_port() {
+    local value="$1"
+    case "$value" in
+        ''|*[!0-9]*)
+            return 1
+            ;;
+    esac
+    [ "$value" -ge 1 ] 2>/dev/null && [ "$value" -le 65535 ] 2>/dev/null
+}
+
+read_config_port() {
+    local key value
+    if [ ! -f "$CONFIG_FILE" ]; then
+        return 1
+    fi
+    while IFS='=' read -r key value; do
+        if [ "$key" = "SERVICE_PORT" ] && is_valid_port "$value"; then
+            echo "$value"
+            return 0
+        fi
+    done < "$CONFIG_FILE"
+    return 1
+}
+
+resolve_port() {
+    if is_valid_port "${wizard_service_port:-}"; then
+        echo "$wizard_service_port"
+        return 0
+    fi
+    if read_config_port; then
+        return 0
+    fi
+    if is_valid_port "$DEFAULT_PORT"; then
+        echo "$DEFAULT_PORT"
+        return 0
+    fi
+    echo "6060"
+}
+
+load_runtime_config() {
+    PORT_VALUE="$(resolve_port)"
+}
+
+persist_runtime_config() {
+    local port_value tmp_file
+    if [ -n "${wizard_service_port:-}" ] && ! is_valid_port "$wizard_service_port"; then
+        write_error "Web UI port must be a number between 1 and 65535."
+        return 1
+    fi
+    port_value="$(resolve_port)"
+    prepare_dirs
+    tmp_file="${CONFIG_FILE}.$$"
+    umask 077
+    printf 'SERVICE_PORT=%s\n' "$port_value" > "$tmp_file"
+    mv "$tmp_file" "$CONFIG_FILE"
+    PORT_VALUE="$port_value"
+}
+
+ensure_executable() {
+    local file_path="$1"
+    if [ ! -f "$file_path" ]; then
+        return 1
+    fi
+    chmod +x "$file_path" 2>/dev/null || true
+    [ -x "$file_path" ]
+}
+
+resolve_python() {
+    local candidate
+    for candidate in "${PYTHON_HOME}/bin/python3" "${PYTHON_HOME}/bin/python" "${PYTHON_HOME}/bin/python3.12"; do
+        if ensure_executable "$candidate"; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+read_pid() {
+    if [ -f "$PID_FILE" ]; then
+        cat "$PID_FILE"
+    fi
+}
+
+pid_alive() {
+    local pid="$1"
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+app_is_running() {
+    local pid
+    pid="$(read_pid)"
+    if pid_alive "$pid"; then
+        return 0
+    fi
+    command -v pgrep >/dev/null 2>&1 && pgrep -f "$SERVER_ENTRY" >/dev/null 2>&1
+}
+
+child_pids() {
+    local parent="$1"
+    local child
+    command -v pgrep >/dev/null 2>&1 || return 0
+    for child in $(pgrep -P "$parent" 2>/dev/null || true); do
+        echo "$child"
+        child_pids "$child"
+    done
+}
+
+app_pids() {
+    local pid pattern
+    pid="$(read_pid)"
+    if pid_alive "$pid"; then
+        echo "$pid"
+        child_pids "$pid"
+    fi
+    if command -v pgrep >/dev/null 2>&1; then
+        for pattern in \
+            "$SERVER_ENTRY" \
+            "${APP_DIR}/runtime/node/bin/node" \
+            "${APP_DIR}/runtime/python" \
+            "${SERVER_DIR}/dist/server/agent-bridge"; do
+            pgrep -f "$pattern" 2>/dev/null || true
+        done
+    fi
+}
+
+unique_app_pids() {
+    local current parent
+    current="$$"
+    parent="$PPID"
+    app_pids | awk -v current="$current" -v parent="$parent" '
+        $0 ~ /^[0-9]+$/ && $0 != current && $0 != parent && !seen[$0]++ { print $0 }
+    '
+}
+
+terminate_pids() {
+    local pids pid still_running
+    pids="$*"
+    [ -n "$pids" ] || return 0
+
+    for pid in $pids; do
+        kill -TERM "$pid" 2>/dev/null || true
+    done
+
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        still_running=0
+        for pid in $pids; do
+            if pid_alive "$pid"; then
+                still_running=1
+                break
+            fi
+        done
+        [ "$still_running" -eq 0 ] && return 0
+        sleep 1
+    done
+
+    for pid in $pids; do
+        kill -KILL "$pid" 2>/dev/null || true
+    done
+}
+
+stop_all_processes() {
+    local pids
+    pids="$(unique_app_pids)"
+    if [ -n "$pids" ]; then
+        terminate_pids $pids
+    fi
+    rm -f "$PID_FILE"
+}
+
+safe_clean_dir_contents() {
+    local dir="$1"
+    if [ -n "$dir" ] && [ "$dir" != "/" ] && [ -d "$dir" ]; then
+        find "$dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    fi
+}
+
+clean_data_share_paths() {
+    local old_ifs path
+    [ -n "${TRIM_DATA_SHARE_PATHS:-}" ] || return 0
+    old_ifs="$IFS"
+    IFS=':'
+    for path in $TRIM_DATA_SHARE_PATHS; do
+        safe_clean_dir_contents "$path"
+    done
+    IFS="$old_ifs"
+}

@@ -4,7 +4,23 @@
     "items": [
       {
         "type": "tips",
-        "helpText": "Hermes Studio runs as a native fnOS service with bundled Node.js and Hermes Agent runtimes. It uses port 6060 by default and stores Hermes Agent data plus Web UI state in the application data directory. The default Web UI login is admin / 123456; change it after first login."
+        "helpText": "Hermes Studio runs as a native fnOS service with bundled Node.js and Hermes Agent runtimes. It stores Hermes Agent data, uploads, logs, and Web UI state in the application data directory. The default Web UI login is admin / 123456; change it after first login."
+      },
+      {
+        "type": "text",
+        "field": "wizard_service_port",
+        "label": "Web UI port",
+        "initValue": "6060",
+        "rules": [
+          {
+            "required": true,
+            "message": "Please enter the Web UI port."
+          },
+          {
+            "pattern": "^[0-9]+$",
+            "message": "The port must be numeric."
+          }
+        ]
       }
     ]
   }

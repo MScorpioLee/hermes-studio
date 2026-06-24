@@ -4,7 +4,29 @@
     "items": [
       {
         "type": "tips",
-        "helpText": "Uninstalling removes the application package. Back up the application data directory first if you want to keep Hermes profiles, credentials, sessions, or Web UI state."
+        "helpText": "Uninstalling stops Hermes Studio and removes the application package. Choose whether to keep Hermes profiles, credentials, uploads, logs, and Web UI state."
+      },
+      {
+        "type": "radio",
+        "field": "wizard_keep_data",
+        "label": "Application data",
+        "initValue": "keep",
+        "options": [
+          {
+            "label": "Keep data and configuration",
+            "value": "keep"
+          },
+          {
+            "label": "Delete data and configuration",
+            "value": "delete"
+          }
+        ],
+        "rules": [
+          {
+            "required": true,
+            "message": "Please choose whether to keep application data."
+          }
+        ]
       }
     ]
   }
