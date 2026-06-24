@@ -1,5 +1,19 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
 import { hasApiKey, isStoredSuperAdmin } from '@/api/client'
+
+const versionPreviewDisabled = import.meta.env.VITE_HERMES_DISABLE_VERSION_PREVIEW === '1'
+
+const versionPreviewRoutes: RouteRecordRaw[] = versionPreviewDisabled
+  ? []
+  : [
+      {
+        path: '/hermes/version-preview',
+        name: 'hermes.versionPreview',
+        component: () => import('@/views/hermes/VersionPreviewView.vue'),
+        meta: { requiresSuperAdmin: true },
+      },
+    ]
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -138,12 +152,7 @@ const router = createRouter({
       name: 'hermes.codingAgents',
       component: () => import('@/views/hermes/CodingAgentsView.vue'),
     },
-    {
-      path: '/hermes/version-preview',
-      name: 'hermes.versionPreview',
-      component: () => import('@/views/hermes/VersionPreviewView.vue'),
-      meta: { requiresSuperAdmin: true },
-    },
+    ...versionPreviewRoutes,
     {
       path: '/hermes/mcp',
       name: 'hermes.mcp',

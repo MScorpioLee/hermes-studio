@@ -92,6 +92,8 @@ describe('update controller', () => {
       process.env.PORT = originalPort
     }
     delete process.env.HERMES_WEB_UI_PREVIEW_REPO
+    delete process.env.HERMES_WEB_UI_DISABLE_VERSION_PREVIEW
+    delete process.env.HERMES_WEB_UI_DISABLE_PREVIEW_RUNTIME
   })
 
   it('updates and restarts through the running Node executable, not PATH shims', async () => {
@@ -362,6 +364,26 @@ describe('update controller', () => {
       [npmCli, 'install', '--include=dev', '--ignore-scripts'],
       expect.any(Object),
     )
+  })
+
+  it('blocks preview runtime endpoints when disabled by environment', async () => {
+    process.env.HERMES_WEB_UI_DISABLE_VERSION_PREVIEW = '1'
+    const { previewStatus, installPreview, mocks } = await loadUpdateController()
+    const statusCtx = createMockCtx()
+    const installCtx = createMockCtx()
+
+    await previewStatus(statusCtx)
+    await installPreview(installCtx)
+
+    expect(statusCtx.status).toBe(404)
+    expect(statusCtx.body).toEqual({
+      success: false,
+      code: 'preview_disabled',
+      message: 'Version Preview is disabled in this Hermes Studio package.',
+    })
+    expect(installCtx.status).toBe(404)
+    expect(installCtx.body).toEqual(statusCtx.body)
+    expect(mocks.execFile).not.toHaveBeenCalled()
   })
 
 })

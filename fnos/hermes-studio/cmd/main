@@ -20,6 +20,7 @@ export_runtime_env() {
     export HERMES_WEB_UI_MANAGED_GATEWAY=1
     export HERMES_WEB_UI_ENABLE_LOCAL_SHUTDOWN=1
     export HERMES_WEB_UI_STOP_GATEWAYS_ON_SHUTDOWN=1
+    export HERMES_WEB_UI_DISABLE_VERSION_PREVIEW=1
     export HERMES_ALLOW_ROOT_GATEWAY=1
     export TIRITH_ENABLED=false
     export PATH="${APP_DIR}/runtime/node/bin:${PYTHON_HOME}/bin:${PATH}"

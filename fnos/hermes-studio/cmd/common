@@ -11,6 +11,8 @@ CONFIG_FILE="${CONFIG_DIR}/runtime.env"
 SHUTDOWN_TOKEN_FILE="${CONFIG_DIR}/shutdown-token"
 PID_FILE="${RUN_DIR}/hermes-studio.pid"
 LOG_FILE="${LOG_DIR}/hermes-studio.log"
+PREVIEW_DIR="${VAR_DIR}/hermes-web-ui/hermes-web-ui-pereview"
+PREVIEW_HOME_DIR="${VAR_DIR}/hermes-web-ui/hermes-web-ui-pereview-home"
 
 DEFAULT_PORT="${TRIM_SERVICE_PORT:-6060}"
 NODE_BIN="${APP_DIR}/runtime/node/bin/node"
@@ -40,6 +42,11 @@ prepare_dirs() {
         "${VAR_DIR}/hermes" \
         "${VAR_DIR}/hermes-web-ui" \
         "${VAR_DIR}/hermes-web-ui/upload"
+    clean_preview_runtime
+}
+
+clean_preview_runtime() {
+    rm -rf "$PREVIEW_DIR" "$PREVIEW_HOME_DIR"
 }
 
 is_valid_port() {

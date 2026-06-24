@@ -14,6 +14,9 @@ The native package includes:
 - `cmd/main` - fnOS lifecycle script that starts `node dist/server/index.js`.
 
 The first native package target is fnOS `platform = x86` / Linux x64.
+The fnOS build disables the in-app Version Preview runtime because that feature
+creates a separate development checkout and installs native npm modules on the
+NAS at runtime.
 
 ## Local Build
 

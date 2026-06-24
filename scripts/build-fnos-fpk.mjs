@@ -94,7 +94,12 @@ async function makeCommandScriptsExecutable() {
 
 async function buildWebUi() {
   if (isTruthy(process.env.FNOS_SKIP_WEB_BUILD)) return
-  run('npm', ['run', 'build'])
+  run('npm', ['run', 'build'], {
+    env: {
+      ...process.env,
+      VITE_HERMES_DISABLE_VERSION_PREVIEW: '1',
+    },
+  })
 }
 
 async function copyServer() {

@@ -6,6 +6,7 @@ import { getWebUiHome } from '../config'
 
 let updateInProgress = false
 const NODE_ENVIRONMENT_MISSING_CODE = 'node_environment_missing'
+const PREVIEW_DISABLED_CODE = 'preview_disabled'
 
 const PREVIEW_DIR_NAME = 'hermes-web-ui-pereview'
 const PREVIEW_HOME_DIR_NAME = 'hermes-web-ui-pereview-home'
@@ -64,6 +65,27 @@ class PreviewRuntimeState {
 }
 
 const previewState = new PreviewRuntimeState()
+
+function envFlagEnabled(name: string) {
+  const raw = process.env[name]
+  return raw === '1' || /^(true|yes|on)$/i.test(String(raw || '').trim())
+}
+
+export function versionPreviewDisabled() {
+  return envFlagEnabled('HERMES_WEB_UI_DISABLE_VERSION_PREVIEW')
+    || envFlagEnabled('HERMES_WEB_UI_DISABLE_PREVIEW_RUNTIME')
+}
+
+function blockDisabledPreview(ctx: any): boolean {
+  if (!versionPreviewDisabled()) return false
+  ctx.status = 404
+  ctx.body = {
+    success: false,
+    code: PREVIEW_DISABLED_CODE,
+    message: 'Version Preview is disabled in this Hermes Studio package.',
+  }
+  return true
+}
 
 interface PackageInfo {
   name: string
@@ -1056,10 +1078,12 @@ export async function handleUpdate(ctx: any) {
 }
 
 export async function previewStatus(ctx: any) {
+  if (blockDisabledPreview(ctx)) return
   ctx.body = previewPayload()
 }
 
 export async function previewTags(ctx: any) {
+  if (blockDisabledPreview(ctx)) return
   const cachedTags = previewState.getCachedTags()
   if (cachedTags) {
     ctx.body = { tags: cachedTags }
@@ -1103,6 +1127,7 @@ export async function previewTags(ctx: any) {
 }
 
 export async function preparePreview(ctx: any) {
+  if (blockDisabledPreview(ctx)) return
   try {
     const tag = assertTagRef((ctx.request.body as any)?.tag)
     const queued = queuePreviewAction('prepare', async () => {
@@ -1124,6 +1149,7 @@ export async function preparePreview(ctx: any) {
 }
 
 export async function installPreview(ctx: any) {
+  if (blockDisabledPreview(ctx)) return
   const queued = queuePreviewAction('install', async () => {
     appendPreviewActionLog('npm install requested')
     await stopPreviewProcess()
@@ -1159,6 +1185,7 @@ export async function installPreview(ctx: any) {
 }
 
 export async function startPreview(ctx: any) {
+  if (blockDisabledPreview(ctx)) return
   try {
     const tag = (ctx.request.body as any)?.tag
     const requestedTag = typeof tag === 'string' && tag.trim() ? assertTagRef(tag) : ''
@@ -1248,6 +1275,7 @@ export async function startPreview(ctx: any) {
 }
 
 export async function stopPreview(ctx: any) {
+  if (blockDisabledPreview(ctx)) return
   appendPreviewActionLog('stop preview requested')
   await stopPreviewProcess()
   ctx.body = previewPayload({ success: true })
