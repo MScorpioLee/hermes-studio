@@ -145,6 +145,7 @@ async function copyRuntime() {
   const stagePythonBin = path.join(runtimeDir, 'python', 'bin')
   await materializeSymlinkedPythonBinary(stagePythonBin, 'python3', 'python3.12')
   await materializeSymlinkedPythonBinary(stagePythonBin, 'python', 'python3.12')
+  await materializeRunAgentEntrypoint(path.join(runtimeDir, 'python'))
 
   const runtimeNode = path.join(runtimeDir, 'node', 'bin', 'node')
   const runtimePython = path.join(runtimeDir, 'python', 'bin', 'python3')
@@ -170,6 +171,32 @@ async function materializeSymlinkedPythonBinary(dir, binaryName, targetName) {
     await rm(binaryPath, { force: true })
     await cp(targetPath, binaryPath, { force: true })
   }
+}
+
+async function materializeRunAgentEntrypoint(pythonRoot) {
+  const entrypoint = path.join(pythonRoot, 'run_agent.py')
+  let shouldCopy = !existsSync(entrypoint)
+
+  try {
+    const st = await lstat(entrypoint)
+    shouldCopy = shouldCopy || st.isSymbolicLink()
+  } catch {
+    shouldCopy = true
+  }
+
+  if (!shouldCopy) return
+
+  const source = [
+    path.join(pythonRoot, 'lib', 'python3.12', 'site-packages', 'run_agent.py'),
+    path.join(pythonRoot, 'lib', 'python3.13', 'site-packages', 'run_agent.py'),
+  ].find(candidate => existsSync(candidate))
+
+  if (!source) {
+    throw new Error(`Missing materialized Hermes Agent entrypoint for ${path.relative(root, pythonRoot)}`)
+  }
+
+  await rm(entrypoint, { force: true })
+  await cp(source, entrypoint, { force: true })
 }
 
 async function runFile(binaryPath) {

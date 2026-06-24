@@ -23,6 +23,7 @@ SERVER_DIR="${APP_DIR}/server"
 SERVER_ENTRY="${SERVER_DIR}/dist/server/index.js"
 PORT_VALUE="$DEFAULT_PORT"
 BRIDGE_PORT_VALUE=""
+WORKER_PORT_BASE_VALUE=""
 
 write_error() {
     local message="$1"
@@ -103,9 +104,20 @@ resolve_bridge_port() {
     echo "$candidate"
 }
 
+resolve_worker_port_base() {
+    local port candidate
+    port="$(resolve_port)"
+    candidate=$((port + 100))
+    if [ "$candidate" -lt 1024 ] 2>/dev/null || [ "$candidate" -gt 64535 ] 2>/dev/null; then
+        candidate=18780
+    fi
+    echo "$candidate"
+}
+
 load_runtime_config() {
     PORT_VALUE="$(resolve_port)"
     BRIDGE_PORT_VALUE="$(resolve_bridge_port)"
+    WORKER_PORT_BASE_VALUE="$(resolve_worker_port_base)"
 }
 
 persist_runtime_config() {
@@ -122,6 +134,7 @@ persist_runtime_config() {
     mv "$tmp_file" "$CONFIG_FILE"
     PORT_VALUE="$port_value"
     BRIDGE_PORT_VALUE="$(resolve_bridge_port)"
+    WORKER_PORT_BASE_VALUE="$(resolve_worker_port_base)"
 }
 
 generate_shutdown_token() {

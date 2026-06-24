@@ -303,6 +303,17 @@ function normalizeReadinessError(endpoint: string, err: unknown): string {
   return normalized || 'agent bridge is unreachable'
 }
 
+function pipeAgentBridgeChildOutput(child: ChildProcess): void {
+  child.stdout?.on('data', (chunk: Buffer) => {
+    const text = chunk.toString('utf-8').trim()
+    if (text) logger.debug('[agent-bridge] stdout: %s', text)
+  })
+  child.stderr?.on('data', (chunk: Buffer) => {
+    const text = chunk.toString('utf-8').trim()
+    if (text) logger.warn('[agent-bridge] stderr: %s', text)
+  })
+}
+
 function mergeStartFailureReadinessError(readiness: AgentBridgeReadiness, err: unknown): string | undefined {
   if (readiness.reachable) {
     return undefined
@@ -893,10 +904,11 @@ export class AgentBridgeManager {
     const child = spawn(command.command, args, {
       env,
       cwd: process.cwd(),
-      stdio: ['ignore', 'ignore', 'ignore'],
+      stdio: ['ignore', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
       windowsHide: true,
     })
+    pipeAgentBridgeChildOutput(child)
     this.child = child
     this.attached = false
     this.ready = false
