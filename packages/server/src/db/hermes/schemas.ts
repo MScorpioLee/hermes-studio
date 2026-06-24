@@ -84,6 +84,82 @@ export const MESSAGES_SCHEMA: Record<string, string> = {
 export const MESSAGES_INDEX = 'CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)'
 
 // ============================================================================
+// Workflow Store
+// ============================================================================
+
+export const WORKFLOWS_TABLE = 'workflows'
+
+export const WORKFLOWS_SCHEMA: Record<string, string> = {
+  id: 'TEXT PRIMARY KEY',
+  name: 'TEXT NOT NULL',
+  profile: "TEXT NOT NULL DEFAULT 'default'",
+  workspace: 'TEXT',
+  nodes_json: "TEXT NOT NULL DEFAULT '[]'",
+  edges_json: "TEXT NOT NULL DEFAULT '[]'",
+  viewport_json: "TEXT NOT NULL DEFAULT '{}'",
+  created_at: 'INTEGER NOT NULL',
+  updated_at: 'INTEGER NOT NULL',
+}
+
+export const WORKFLOWS_INDEXES = {
+  idx_workflows_profile: 'CREATE INDEX IF NOT EXISTS idx_workflows_profile ON workflows(profile)',
+  idx_workflows_updated_at: 'CREATE INDEX IF NOT EXISTS idx_workflows_updated_at ON workflows(updated_at)',
+}
+
+export const WORKFLOW_RUNS_TABLE = 'workflow_runs'
+
+export const WORKFLOW_RUNS_SCHEMA: Record<string, string> = {
+  id: 'TEXT PRIMARY KEY',
+  workflow_id: 'TEXT NOT NULL',
+  profile: "TEXT NOT NULL DEFAULT 'default'",
+  workspace: 'TEXT',
+  start_node_ids_json: "TEXT NOT NULL DEFAULT '[]'",
+  status: "TEXT NOT NULL DEFAULT 'queued'",
+  snapshot_nodes_json: "TEXT NOT NULL DEFAULT '[]'",
+  snapshot_edges_json: "TEXT NOT NULL DEFAULT '[]'",
+  started_at: 'INTEGER',
+  finished_at: 'INTEGER',
+  created_at: 'INTEGER NOT NULL',
+  error: 'TEXT',
+}
+
+export const WORKFLOW_RUNS_INDEXES = {
+  idx_workflow_runs_workflow: 'CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(workflow_id)',
+  idx_workflow_runs_status: 'CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)',
+  idx_workflow_runs_created_at: 'CREATE INDEX IF NOT EXISTS idx_workflow_runs_created_at ON workflow_runs(created_at)',
+}
+
+export const WORKFLOW_RUN_NODE_SESSIONS_TABLE = 'workflow_run_node_sessions'
+
+export const WORKFLOW_RUN_NODE_SESSIONS_SCHEMA: Record<string, string> = {
+  id: 'TEXT PRIMARY KEY',
+  run_id: 'TEXT NOT NULL',
+  workflow_id: 'TEXT NOT NULL',
+  node_id: 'TEXT NOT NULL',
+  session_id: 'TEXT NOT NULL',
+  profile: "TEXT NOT NULL DEFAULT 'default'",
+  agent: "TEXT NOT NULL DEFAULT ''",
+  agent_mode: "TEXT NOT NULL DEFAULT ''",
+  status: "TEXT NOT NULL DEFAULT 'queued'",
+  sequence: 'INTEGER NOT NULL DEFAULT 0',
+  started_at: 'INTEGER',
+  finished_at: 'INTEGER',
+  created_at: 'INTEGER NOT NULL',
+  updated_at: 'INTEGER NOT NULL',
+  error: 'TEXT',
+}
+
+export const WORKFLOW_RUN_NODE_SESSIONS_INDEXES = {
+  idx_workflow_run_node_sessions_run: 'CREATE INDEX IF NOT EXISTS idx_workflow_run_node_sessions_run ON workflow_run_node_sessions(run_id)',
+  idx_workflow_run_node_sessions_workflow: 'CREATE INDEX IF NOT EXISTS idx_workflow_run_node_sessions_workflow ON workflow_run_node_sessions(workflow_id)',
+  idx_workflow_run_node_sessions_node: 'CREATE INDEX IF NOT EXISTS idx_workflow_run_node_sessions_node ON workflow_run_node_sessions(node_id)',
+  idx_workflow_run_node_sessions_session: 'CREATE INDEX IF NOT EXISTS idx_workflow_run_node_sessions_session ON workflow_run_node_sessions(session_id)',
+  idx_workflow_run_node_sessions_status: 'CREATE INDEX IF NOT EXISTS idx_workflow_run_node_sessions_status ON workflow_run_node_sessions(status)',
+  idx_workflow_run_node_sessions_sequence: 'CREATE INDEX IF NOT EXISTS idx_workflow_run_node_sessions_sequence ON workflow_run_node_sessions(run_id, sequence)',
+  uniq_workflow_run_node_sessions_run_node: 'CREATE UNIQUE INDEX IF NOT EXISTS uniq_workflow_run_node_sessions_run_node ON workflow_run_node_sessions(run_id, node_id)',
+}
+
+// ============================================================================
 // Compression Snapshot (compression-snapshot.ts)
 // ============================================================================
 
@@ -645,6 +721,17 @@ export function initAllHermesTables(): void {
     syncTable(SESSIONS_TABLE, SESSIONS_SCHEMA)
     syncTable(MESSAGES_TABLE, MESSAGES_SCHEMA)
     db.exec(MESSAGES_INDEX)
+
+    // Workflow store
+    syncTable(WORKFLOWS_TABLE, WORKFLOWS_SCHEMA, {
+      indexes: WORKFLOWS_INDEXES,
+    })
+    syncTable(WORKFLOW_RUNS_TABLE, WORKFLOW_RUNS_SCHEMA, {
+      indexes: WORKFLOW_RUNS_INDEXES,
+    })
+    syncTable(WORKFLOW_RUN_NODE_SESSIONS_TABLE, WORKFLOW_RUN_NODE_SESSIONS_SCHEMA, {
+      indexes: WORKFLOW_RUN_NODE_SESSIONS_INDEXES,
+    })
 
     // Compression snapshot
     syncTable(COMPRESSION_SNAPSHOT_TABLE, COMPRESSION_SNAPSHOT_SCHEMA)
