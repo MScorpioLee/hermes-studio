@@ -16,11 +16,12 @@ export_runtime_env() {
     export HERMES_BIN="$HERMES_BIN_VALUE"
     export HERMES_AGENT_CLI_PYTHON="$PYTHON_BIN"
     export HERMES_AGENT_BRIDGE_PYTHON="$PYTHON_BIN"
-    export HERMES_AGENT_BRIDGE_ENDPOINT="ipc://${RUN_DIR}/agent-bridge.sock"
+    export HERMES_AGENT_BRIDGE_ENDPOINT="tcp://127.0.0.1:${BRIDGE_PORT_VALUE}"
     export HERMES_WEB_UI_MANAGED_GATEWAY=1
     export HERMES_WEB_UI_ENABLE_LOCAL_SHUTDOWN=1
     export HERMES_WEB_UI_STOP_GATEWAYS_ON_SHUTDOWN=1
     export HERMES_ALLOW_ROOT_GATEWAY=1
+    export TIRITH_ENABLED=false
     export PATH="${APP_DIR}/runtime/node/bin:${PYTHON_HOME}/bin:${PATH}"
 }
 

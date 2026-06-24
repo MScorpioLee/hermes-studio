@@ -20,6 +20,7 @@ HERMES_BIN_VALUE="${PYTHON_HOME}/bin/hermes"
 SERVER_DIR="${APP_DIR}/server"
 SERVER_ENTRY="${SERVER_DIR}/dist/server/index.js"
 PORT_VALUE="$DEFAULT_PORT"
+BRIDGE_PORT_VALUE=""
 
 write_error() {
     local message="$1"
@@ -80,8 +81,24 @@ resolve_port() {
     echo "6060"
 }
 
+resolve_bridge_port() {
+    local port candidate
+    port="$(resolve_port)"
+    if [ "$port" -lt 65535 ] 2>/dev/null; then
+        candidate=$((port + 1))
+    else
+        candidate=18766
+    fi
+
+    if [ "$candidate" -eq "$port" ] 2>/dev/null; then
+        candidate=18766
+    fi
+    echo "$candidate"
+}
+
 load_runtime_config() {
     PORT_VALUE="$(resolve_port)"
+    BRIDGE_PORT_VALUE="$(resolve_bridge_port)"
 }
 
 persist_runtime_config() {
@@ -97,6 +114,7 @@ persist_runtime_config() {
     printf 'SERVICE_PORT=%s\n' "$port_value" > "$tmp_file"
     mv "$tmp_file" "$CONFIG_FILE"
     PORT_VALUE="$port_value"
+    BRIDGE_PORT_VALUE="$(resolve_bridge_port)"
 }
 
 generate_shutdown_token() {
