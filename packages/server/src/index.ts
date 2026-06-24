@@ -101,6 +101,10 @@ function isDesktopRuntime(): boolean {
   return String(process.env.HERMES_DESKTOP || '').trim().toLowerCase() === 'true'
 }
 
+function localShutdownEnabled(): boolean {
+  return isDesktopRuntime() || envFlagEnabled('HERMES_WEB_UI_ENABLE_LOCAL_SHUTDOWN')
+}
+
 function isLoopbackAddress(address?: string | null): boolean {
   if (!address) return false
   return address === '127.0.0.1'
@@ -122,7 +126,7 @@ function registerDesktopShutdownRoute(app: Koa): void {
       return
     }
 
-    if (!isDesktopRuntime()) {
+    if (!localShutdownEnabled()) {
       ctx.status = 404
       ctx.body = { error: 'not_found' }
       return

@@ -8,6 +8,7 @@ RUN_DIR="${VAR_DIR}/run"
 LOG_DIR="${VAR_DIR}/log"
 CONFIG_DIR="${VAR_DIR}/config"
 CONFIG_FILE="${CONFIG_DIR}/runtime.env"
+SHUTDOWN_TOKEN_FILE="${CONFIG_DIR}/shutdown-token"
 PID_FILE="${RUN_DIR}/hermes-studio.pid"
 LOG_FILE="${LOG_DIR}/hermes-studio.log"
 
@@ -98,6 +99,38 @@ persist_runtime_config() {
     PORT_VALUE="$port_value"
 }
 
+generate_shutdown_token() {
+    if [ -r /dev/urandom ] && command -v od >/dev/null 2>&1 && command -v tr >/dev/null 2>&1; then
+        od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+        return 0
+    fi
+    printf '%s%s%s\n' "$APP_NAME" "$$" "$(date +%s)"
+}
+
+read_shutdown_token() {
+    if [ -s "$SHUTDOWN_TOKEN_FILE" ]; then
+        cat "$SHUTDOWN_TOKEN_FILE"
+        return 0
+    fi
+    return 1
+}
+
+ensure_shutdown_token() {
+    local token tmp_file
+    if read_shutdown_token; then
+        return 0
+    fi
+
+    prepare_dirs
+    token="$(generate_shutdown_token)"
+    tmp_file="${SHUTDOWN_TOKEN_FILE}.$$"
+    umask 077
+    printf '%s\n' "$token" > "$tmp_file"
+    mv "$tmp_file" "$SHUTDOWN_TOKEN_FILE"
+    chmod 600 "$SHUTDOWN_TOKEN_FILE" 2>/dev/null || true
+    echo "$token"
+}
+
 ensure_executable() {
     local file_path="$1"
     if [ ! -f "$file_path" ]; then
@@ -175,6 +208,35 @@ unique_app_pids() {
     '
 }
 
+request_webui_shutdown() {
+    local token port url
+    token="$(read_shutdown_token)" || return 1
+    port="$(resolve_port)"
+    url="http://127.0.0.1:${port}/api/desktop/shutdown"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsS -m 5 -X POST -H "Authorization: Bearer ${token}" "$url" >/dev/null 2>&1
+        return $?
+    fi
+
+    if command -v wget >/dev/null 2>&1; then
+        wget -q -T 5 -O /dev/null --method=POST --header="Authorization: Bearer ${token}" "$url" >/dev/null 2>&1
+        return $?
+    fi
+
+    return 1
+}
+
+wait_for_app_exit() {
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        if ! app_is_running; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
 terminate_pids() {
     local pids pid still_running
     pids="$*"
@@ -203,11 +265,37 @@ terminate_pids() {
 
 stop_all_processes() {
     local pids
+    if app_is_running; then
+        request_webui_shutdown && wait_for_app_exit
+    fi
     pids="$(unique_app_pids)"
     if [ -n "$pids" ]; then
         terminate_pids $pids
     fi
+    mark_gateway_stopped
     rm -f "$PID_FILE"
+}
+
+write_gateway_stopped_state() {
+    local profile_dir="$1"
+    local state_file="${profile_dir}/gateway_state.json"
+    [ -d "$profile_dir" ] || return 0
+    cat > "$state_file" <<EOF
+{
+  "gateway_state": "stopped",
+  "desired_state": "stopped",
+  "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+    rm -f "${profile_dir}/gateway.pid" "${profile_dir}/gateway.lock" 2>/dev/null || true
+}
+
+mark_gateway_stopped() {
+    local profile_dir
+    write_gateway_stopped_state "${VAR_DIR}/hermes"
+    for profile_dir in "${VAR_DIR}/hermes/profiles"/*; do
+        write_gateway_stopped_state "$profile_dir"
+    done
 }
 
 safe_clean_dir_contents() {

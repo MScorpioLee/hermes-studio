@@ -8,6 +8,7 @@ export_runtime_env() {
     export NODE_ENV=production
     export PORT="$PORT_VALUE"
     export BIND_HOST=0.0.0.0
+    export AUTH_TOKEN="$AUTH_TOKEN_VALUE"
     export HERMES_HOME="${VAR_DIR}/hermes"
     export HERMES_WEB_UI_HOME="${VAR_DIR}/hermes-web-ui"
     export HERMES_WEBUI_STATE_DIR="${VAR_DIR}/hermes-web-ui"
@@ -17,6 +18,8 @@ export_runtime_env() {
     export HERMES_AGENT_BRIDGE_PYTHON="$PYTHON_BIN"
     export HERMES_AGENT_BRIDGE_ENDPOINT="ipc://${RUN_DIR}/agent-bridge.sock"
     export HERMES_WEB_UI_MANAGED_GATEWAY=1
+    export HERMES_WEB_UI_ENABLE_LOCAL_SHUTDOWN=1
+    export HERMES_WEB_UI_STOP_GATEWAYS_ON_SHUTDOWN=1
     export HERMES_ALLOW_ROOT_GATEWAY=1
     export PATH="${APP_DIR}/runtime/node/bin:${PYTHON_HOME}/bin:${PATH}"
 }
@@ -51,6 +54,8 @@ start_app() {
         write_error "Hermes Studio server entry missing: $SERVER_ENTRY"
         exit 1
     fi
+
+    AUTH_TOKEN_VALUE="$(ensure_shutdown_token)" || exit 1
 
     export_runtime_env
 
