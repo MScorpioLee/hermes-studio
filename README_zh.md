@@ -429,3 +429,6 @@ BFF 层负责：Socket.IO 聊天流式推送、Hermes agent bridge、按 Profile
 ## 许可证
 
 [BSL-1.1](./LICENSE)
+
+该许可证覆盖 Hermes Studio、原 Hermes Web UI 名称、`hermes-web-ui` npm 包和
+CLI、桌面应用、固件、发布产物、文档以及本仓库内的关联文件。

@@ -426,3 +426,7 @@ The BFF layer handles Socket.IO chat streaming, the Hermes agent bridge, profile
 ## License
 
 [BSL-1.1](./LICENSE)
+
+The license covers Hermes Studio, the former Hermes Web UI name, the
+`hermes-web-ui` npm package and CLI, desktop applications, firmware, release
+artifacts, documentation, and associated files in this repository.
