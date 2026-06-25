@@ -9776,6 +9776,37 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "STT"
+        ],
+        "summary": "Delete :provider",
+        "description": "DELETE /api/hermes/stt/settings/:provider",
+        "operationId": "deleteProvider",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/api/hermes/stt/settings/{provider}/base-url-preset": {
@@ -10062,6 +10093,37 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "TTS"
+        ],
+        "summary": "Delete :provider",
+        "description": "DELETE /api/hermes/tts/settings/:provider",
+        "operationId": "deleteProvider",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/api/hermes/tts/settings/{provider}/base-url-preset": {
