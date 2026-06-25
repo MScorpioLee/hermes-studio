@@ -37,6 +37,8 @@ const envPlatformMap: Record<string, [string, string]> = {
   SLACK_BOT_TOKEN: ['slack', 'token'],
   MATRIX_ACCESS_TOKEN: ['matrix', 'token'],
   MATRIX_HOMESERVER: ['matrix', 'extra.homeserver'],
+  MATRIX_USER_ID: ['matrix', 'extra.user_id'],
+  MATRIX_PASSWORD: ['matrix', 'extra.password'],
   FEISHU_APP_ID: ['feishu', 'extra.app_id'],
   FEISHU_APP_SECRET: ['feishu', 'extra.app_secret'],
   FEISHU_ENCRYPT_KEY: ['feishu', 'extra.encrypt_key'],

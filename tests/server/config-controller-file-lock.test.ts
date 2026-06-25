@@ -445,6 +445,41 @@ describe('config controller locked file updates', () => {
     expect(config.platforms.feishu.extra.verification_token).toBeUndefined()
   })
 
+  it('round-trips Matrix password credentials through env-backed platform settings', async () => {
+    await writeFile(join(hermesHome, 'config.yaml'), [
+      'platforms:',
+      '  matrix:',
+      '    extra:',
+      '      homeserver: https://old.example.org',
+      '',
+    ].join('\n'), 'utf-8')
+    await writeFile(join(hermesHome, '.env'), 'OPENROUTER_API_KEY=keep\n', 'utf-8')
+    const { updateCredentials, getConfig } = await loadController()
+
+    await updateCredentials(makeCtx({
+      platform: 'matrix',
+      values: {
+        extra: {
+          homeserver: 'https://matrix.example.org',
+          user_id: '@hermes:example.org',
+          password: 'matrix-secret',
+        },
+      },
+    }))
+
+    const env = await readFile(join(hermesHome, '.env'), 'utf-8')
+    expect(env).toContain('OPENROUTER_API_KEY=keep')
+    expect(env).toContain('MATRIX_HOMESERVER=https://matrix.example.org')
+    expect(env).toContain('MATRIX_USER_ID=@hermes:example.org')
+    expect(env).toContain('MATRIX_PASSWORD=matrix-secret')
+
+    const readCtx = makeCtx({})
+    await getConfig(readCtx)
+    expect(readCtx.body.platforms.matrix.extra.homeserver).toBe('https://matrix.example.org')
+    expect(readCtx.body.platforms.matrix.extra.user_id).toBe('@hermes:example.org')
+    expect(readCtx.body.platforms.matrix.extra.password).toBe('matrix-secret')
+  })
+
   it('reads and writes channel settings in the request-scoped profile only', async () => {
     const researchDir = join(hermesHome, 'profiles', 'research')
     await mkdir(researchDir, { recursive: true })
