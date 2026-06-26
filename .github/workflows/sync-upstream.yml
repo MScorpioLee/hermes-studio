@@ -55,10 +55,11 @@ jobs:
         if: steps.sync.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-          gh workflow run fnos-package.yml --ref main -f hermes_version=0.17.0
+          gh workflow run fnos-package.yml --repo "${GH_REPO}" --ref main -f hermes_version=0.17.0
 
       - name: Summary
         shell: bash
