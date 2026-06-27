@@ -15,6 +15,7 @@ const PLATFORM_SECTIONS = new Set([
 ])
 
 const APP_CONFIG_SECTIONS = new Set(['gatewayAutoStart'])
+const PROXY_ENV_KEYS = ['HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY', 'NO_PROXY'] as const
 
 function requestedProfile(ctx: any): string {
   const headerProfile = typeof ctx.get === 'function' ? ctx.get('x-hermes-profile') : ''
@@ -33,9 +34,12 @@ const envPath = (profile: string) => join(getProfileDir(profile), '.env')
 
 const envPlatformMap: Record<string, [string, string]> = {
   TELEGRAM_BOT_TOKEN: ['telegram', 'token'],
+  TELEGRAM_PROXY: ['telegram', 'proxy'],
   DISCORD_BOT_TOKEN: ['discord', 'token'],
+  DISCORD_PROXY: ['discord', 'proxy'],
   SLACK_BOT_TOKEN: ['slack', 'token'],
   MATRIX_ACCESS_TOKEN: ['matrix', 'token'],
+  MATRIX_PROXY: ['matrix', 'proxy'],
   MATRIX_HOMESERVER: ['matrix', 'extra.homeserver'],
   MATRIX_USER_ID: ['matrix', 'extra.user_id'],
   MATRIX_PASSWORD: ['matrix', 'extra.password'],
@@ -183,6 +187,18 @@ async function readEnvPlatforms(profile: string): Promise<Record<string, any>> {
   } catch { return {} }
 }
 
+async function readProxyEnv(profile: string): Promise<Record<string, string>> {
+  try {
+    const raw = await readFile(envPath(profile), 'utf-8')
+    const env = parseEnv(raw)
+    const proxy: Record<string, string> = {}
+    for (const key of PROXY_ENV_KEYS) {
+      if (env[key]) proxy[key] = env[key]
+    }
+    return proxy
+  } catch { return {} }
+}
+
 async function readConfig(profile: string): Promise<Record<string, any>> {
   return safeFileStore.readYaml(configPath(profile))
 }
@@ -239,6 +255,7 @@ export async function getConfig(ctx: any) {
     const profile = requestedProfile(ctx)
     const config = await readConfig(profile)
     const gatewayAutoStart = await readGatewayAutoStartForResponse()
+    const proxy = await readProxyEnv(profile)
     const envPlatforms = await readEnvPlatforms(profile)
     if (Object.keys(envPlatforms).length > 0) {
       const existing = config.platforms || {}
@@ -254,17 +271,25 @@ export async function getConfig(ctx: any) {
         ctx.body = { gatewayAutoStart }
         return
       }
+      if (key === 'proxy') {
+        ctx.body = { proxy }
+        return
+      }
       ctx.body = { [key]: config[key] || {} }
     } else if (sections) {
       const keys = (sections as string).split(',')
       const result: Record<string, any> = {}
       for (const key of keys) {
         const trimmed = key.trim()
-        result[trimmed] = trimmed === 'gatewayAutoStart' ? gatewayAutoStart : (config[trimmed] || {})
+        result[trimmed] = trimmed === 'gatewayAutoStart'
+          ? gatewayAutoStart
+          : trimmed === 'proxy'
+            ? proxy
+            : (config[trimmed] || {})
       }
       ctx.body = result
     } else {
-      ctx.body = { ...config, gatewayAutoStart }
+      ctx.body = { ...config, gatewayAutoStart, proxy }
     }
   } catch (err: any) {
     ctx.status = 500; ctx.body = { error: err.message }
@@ -277,6 +302,27 @@ export async function updateConfig(ctx: any) {
     ctx.status = 400; ctx.body = { error: 'Missing section or values' }; return
   }
   try {
+    if (section === 'proxy') {
+      const profile = requestedProfile(ctx)
+      for (const key of PROXY_ENV_KEYS) {
+        if (!Object.prototype.hasOwnProperty.call(values, key)) continue
+        await saveEnvValueForProfile(profile, key, values[key] ? String(values[key]) : '')
+      }
+      if (restart !== false && await gatewayAutoRestartAllowed()) {
+        try {
+          const restartResult = await restartGatewayForProfile(profile)
+          logger.info('[config] gateway restarted after proxy update profile=%s result=%j', profile, restartResult)
+        } catch (err) {
+          logger.error(err, 'Gateway restart failed')
+          ctx.status = 500
+          ctx.body = { error: err instanceof Error ? err.message : 'Gateway restart failed' }
+          return
+        }
+      }
+      ctx.body = { success: true }
+      return
+    }
+
     if (APP_CONFIG_SECTIONS.has(section)) {
       if (section === 'gatewayAutoStart') {
         const appConfig = await readAppConfig()
