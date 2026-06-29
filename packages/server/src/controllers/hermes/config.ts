@@ -123,6 +123,13 @@ const AUXILIARY_TASKS = [
 const AUX_STRING_FIELDS = new Set(['provider', 'model', 'base_url', 'api_key'])
 const AUX_NUMBER_FIELDS = new Set(['timeout', 'download_timeout'])
 
+const DEFAULT_MOA_PRESET_NAME = 'default'
+const DEFAULT_MOA_REFERENCE_MODELS = [
+  { provider: 'openai-codex', model: 'gpt-5.5' },
+  { provider: 'openrouter', model: 'deepseek/deepseek-v4-pro' },
+]
+const DEFAULT_MOA_AGGREGATOR = { provider: 'openrouter', model: 'anthropic/claude-opus-4.8' }
+
 function isPlainRecord(value: unknown): value is Record<string, any> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -168,6 +175,84 @@ function normalizeAuxiliaryConfig(value: unknown, options: { resetAuto?: boolean
   }
 
   return normalized
+}
+
+function cleanMoaSlot(value: unknown): { provider: string; model: string } | null {
+  if (!isPlainRecord(value)) return null
+  const provider = typeof value.provider === 'string' ? value.provider.trim() : ''
+  const model = typeof value.model === 'string' ? value.model.trim() : ''
+  if (!provider || !model || provider.toLowerCase() === 'moa') return null
+  return { provider, model }
+}
+
+function coerceMoaNumber(value: unknown, fallback: number): number {
+  if (value === null || value === undefined || value === '') return fallback
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : fallback
+}
+
+function coerceMoaInt(value: unknown, fallback: number): number {
+  return Math.floor(coerceMoaNumber(value, fallback))
+}
+
+function defaultMoaPreset(): Record<string, any> {
+  return {
+    reference_models: DEFAULT_MOA_REFERENCE_MODELS.map(slot => ({ ...slot })),
+    aggregator: { ...DEFAULT_MOA_AGGREGATOR },
+    reference_temperature: 0.6,
+    aggregator_temperature: 0.4,
+    max_tokens: 4096,
+    enabled: true,
+  }
+}
+
+function normalizeMoaPreset(value: unknown): Record<string, any> {
+  const raw = isPlainRecord(value) ? value : {}
+  const rawRefs = Array.isArray(raw.reference_models)
+    ? raw.reference_models
+    : isPlainRecord(raw.reference_models) ? [raw.reference_models] : []
+  const referenceModels = rawRefs.map(cleanMoaSlot).filter((slot): slot is { provider: string; model: string } => !!slot)
+  const aggregator = cleanMoaSlot(raw.aggregator) || { ...DEFAULT_MOA_AGGREGATOR }
+  return {
+    enabled: raw.enabled === undefined ? true : Boolean(raw.enabled),
+    reference_models: referenceModels.length > 0 ? referenceModels : DEFAULT_MOA_REFERENCE_MODELS.map(slot => ({ ...slot })),
+    aggregator,
+    reference_temperature: coerceMoaNumber(raw.reference_temperature, 0.6),
+    aggregator_temperature: coerceMoaNumber(raw.aggregator_temperature, 0.4),
+    max_tokens: coerceMoaInt(raw.max_tokens, 4096),
+  }
+}
+
+function normalizeMoaConfig(value: unknown): Record<string, any> {
+  const raw = isPlainRecord(value) ? value : {}
+  const presets: Record<string, any> = {}
+  if (isPlainRecord(raw.presets)) {
+    for (const [name, preset] of Object.entries(raw.presets)) {
+      const cleanName = String(name || '').trim()
+      if (cleanName && isSafeAuxiliaryKey(cleanName)) presets[cleanName] = normalizeMoaPreset(preset)
+    }
+  }
+  if (Object.keys(presets).length === 0) presets[DEFAULT_MOA_PRESET_NAME] = normalizeMoaPreset(raw)
+
+  let defaultPreset = typeof raw.default_preset === 'string' ? raw.default_preset.trim() : ''
+  if (!defaultPreset || !presets[defaultPreset]) defaultPreset = Object.keys(presets)[0] || DEFAULT_MOA_PRESET_NAME
+  if (!presets[defaultPreset]) presets[defaultPreset] = defaultMoaPreset()
+
+  let activePreset = typeof raw.active_preset === 'string' ? raw.active_preset.trim() : ''
+  if (!presets[activePreset]) activePreset = ''
+
+  const active = presets[defaultPreset]
+  return {
+    default_preset: defaultPreset,
+    active_preset: activePreset,
+    presets,
+    reference_models: active.reference_models.map((slot: any) => ({ ...slot })),
+    aggregator: { ...active.aggregator },
+    reference_temperature: active.reference_temperature,
+    aggregator_temperature: active.aggregator_temperature,
+    max_tokens: active.max_tokens,
+    enabled: active.enabled,
+  }
 }
 
 async function readEnvPlatforms(profile: string): Promise<Record<string, any>> {
@@ -417,6 +502,48 @@ export async function updateAuxiliaryModels(ctx: any) {
       },
     })
     ctx.body = { success: true, auxiliary }
+  } catch (err: any) {
+    ctx.status = 500
+    ctx.body = { error: err.message }
+  }
+}
+
+export async function getMoaConfig(ctx: any) {
+  try {
+    const profile = requestedProfile(ctx)
+    const config = await readConfig(profile)
+    ctx.body = normalizeMoaConfig(config.moa)
+  } catch (err: any) {
+    ctx.status = 500
+    ctx.body = { error: err.message }
+  }
+}
+
+export async function updateMoaConfig(ctx: any) {
+  const body = ctx.request.body as { moa?: unknown }
+  if (!body || !isPlainRecord(body.moa)) {
+    ctx.status = 400
+    ctx.body = { error: 'Missing MoA config' }
+    return
+  }
+
+  try {
+    const profile = requestedProfile(ctx)
+    const moa = normalizeMoaConfig(body.moa)
+    await safeFileStore.updateYaml(configPath(profile), (config) => {
+      config.moa = {
+        default_preset: moa.default_preset,
+        active_preset: moa.active_preset,
+        presets: moa.presets,
+      }
+      return config
+    }, {
+      backup: true,
+      dumpOptions: {
+        forceQuotes: true,
+      },
+    })
+    ctx.body = { success: true, moa }
   } catch (err: any) {
     ctx.status = 500
     ctx.body = { error: err.message }

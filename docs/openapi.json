@@ -3,7 +3,7 @@
   "info": {
     "title": "Hermes Studio API",
     "description": "Hermes Studio API — chat sessions, scheduled jobs, platform channels, model management, skills, memory, logs, file browser, group chat, and terminal.",
-    "version": "0.6.21"
+    "version": "0.6.22"
   },
   "servers": [
     {
@@ -3405,6 +3405,72 @@
                   "platform",
                   "values"
                 ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/config/moa": {
+      "get": {
+        "tags": [
+          "Config"
+        ],
+        "summary": "Get moa",
+        "description": "GET /api/hermes/config/moa",
+        "operationId": "getMoaConfig",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Config"
+        ],
+        "summary": "Update moa",
+        "description": "PUT /api/hermes/config/moa",
+        "operationId": "updateMoaConfig",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "moa": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
               }
             }
           }
@@ -8689,28 +8755,7 @@
           "404": {
             "description": "Not found"
           }
-        },
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "name": "source",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "global_agent"
-              ]
-            }
-          }
-        ]
+        }
       }
     },
     "/api/hermes/sessions/hermes/{id}": {

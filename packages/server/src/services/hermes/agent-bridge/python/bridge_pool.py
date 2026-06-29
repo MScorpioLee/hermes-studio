@@ -335,6 +335,8 @@ class AgentPool:
             base_url=runtime.get("base_url") or "",
             api_mode=runtime.get("api_mode") or "",
         )
+        if resolved_provider.lower() == "moa":
+            self._install_moa_reference_callback(session)
         session.config.update({
             "profile": target_profile,
             "model": requested_model,
@@ -363,6 +365,45 @@ class AgentPool:
             "loaded": True,
             "switched": True,
         }
+
+    def _install_moa_reference_callback(self, session: AgentSession) -> None:
+        try:
+            from agent.moa_loop import MoAClient
+
+            progress_callback = self._tool_progress_callback(session.session_id)
+
+            def reference_callback(event: str, **kwargs: Any) -> None:
+                if event == "moa.reference":
+                    progress_callback(
+                        "moa.reference",
+                        str(kwargs.get("label") or ""),
+                        str(kwargs.get("text") or ""),
+                        None,
+                        moa_index=kwargs.get("index"),
+                        moa_count=kwargs.get("count"),
+                    )
+                elif event == "moa.aggregating":
+                    progress_callback(
+                        "moa.aggregating",
+                        str(kwargs.get("aggregator") or ""),
+                        None,
+                        None,
+                        moa_ref_count=kwargs.get("ref_count"),
+                    )
+
+            session.agent.client = MoAClient(
+                str(getattr(session.agent, "model", "") or session.config.get("model") or "default"),
+                reference_callback=reference_callback,
+            )
+            session.agent._client_kwargs = {}
+            session.agent.api_key = getattr(session.agent, "api_key", None) or "moa-virtual-provider"
+            session.agent.base_url = "moa://local"
+        except Exception as exc:
+            print(
+                f"[hermes_bridge] failed to install MoA reference callback session={session.session_id} error={exc}",
+                file=sys.stderr,
+                flush=True,
+            )
 
     def _apply_pending_session_model_switch(self, session: AgentSession) -> None:
         pending = session.config.get("pending_model_switch")
@@ -743,6 +784,26 @@ class AgentPool:
                 for key, value in kwargs.items():
                     payload[str(key)] = _jsonable(value)
                 self._append_event(session_id, payload)
+                return
+
+            if event_type == "moa.reference":
+                payload = {
+                    "event": "moa.reference",
+                    "label": str(function_name or kwargs.get("label") or "reference"),
+                    "text": str(preview) if preview is not None else "",
+                }
+                if kwargs.get("moa_index") is not None:
+                    payload["index"] = _jsonable(kwargs.get("moa_index"))
+                if kwargs.get("moa_count") is not None:
+                    payload["count"] = _jsonable(kwargs.get("moa_count"))
+                self._append_event(session_id, payload)
+                return
+
+            if event_type == "moa.aggregating":
+                self._append_event(session_id, {
+                    "event": "moa.aggregating",
+                    "aggregator": str(function_name or kwargs.get("aggregator") or ""),
+                })
                 return
 
             if event_type == "_thinking":

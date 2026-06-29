@@ -4,6 +4,7 @@ const addMessageMock = vi.fn()
 const createSessionMock = vi.fn()
 const getSessionMock = vi.fn()
 const updateSessionStatsMock = vi.fn()
+const readConfigYamlForProfileMock = vi.fn()
 
 vi.mock('../../packages/server/src/db/hermes/session-store', () => ({
   addMessage: addMessageMock,
@@ -16,6 +17,10 @@ vi.mock('../../packages/server/src/db/hermes/session-store', () => ({
 
 vi.mock('../../packages/server/src/services/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}))
+
+vi.mock('../../packages/server/src/services/config-helpers', () => ({
+  readConfigYamlForProfile: readConfigYamlForProfileMock,
 }))
 
 vi.mock('../../packages/server/src/services/hermes/run-chat/compression', () => ({
@@ -83,6 +88,20 @@ describe('plan session command', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getSessionMock.mockReturnValue({ id: 'session-1', profile: 'default', source: 'cli' })
+    readConfigYamlForProfileMock.mockResolvedValue({
+      moa: {
+        default_preset: 'default',
+        presets: {
+          default: {
+            reference_models: [
+              { provider: 'xai-oauth', model: 'grok-4.3' },
+              { provider: 'custom:fun-codex', model: 'gpt-5.5' },
+            ],
+            aggregator: { provider: 'glm', model: 'glm-5.2' },
+          },
+        },
+      },
+    })
   })
 
   it('queues running plan commands once without visible command echo', async () => {
@@ -120,6 +139,107 @@ describe('plan session command', () => {
       })],
     }))
     expect(namespaceEmit).not.toHaveBeenCalledWith('session.command', expect.anything())
+  })
+
+  it('queues running moa commands once without persisting an extra command message', async () => {
+    const state = { messages: [], isWorking: true, events: [], queue: [] }
+    const { bridge, namespaceEmit, nsp, runQueuedItem, sessionMap, socket } = makeContext(state)
+    const { handleSessionCommand, parseSessionCommand } = await import('../../packages/server/src/services/hermes/run-chat/session-command')
+    const command = parseSessionCommand('/moa 讨论下黄金走势')!
+
+    await handleSessionCommand('session-1', command, {
+      nsp: nsp as any,
+      socket: socket as any,
+      sessionMap,
+      bridge: bridge as any,
+      profile: 'default',
+      queueId: 'client-queue-id',
+      runQueuedItem,
+    })
+
+    expect(addMessageMock).not.toHaveBeenCalled()
+    expect(runQueuedItem).not.toHaveBeenCalled()
+    expect(state.queue).toEqual([expect.objectContaining({
+      queue_id: 'client-queue-id',
+      input: '讨论下黄金走势',
+      displayInput: '/moa 讨论下黄金走势',
+      displayRole: 'command',
+      storageMessage: '/moa 讨论下黄金走势',
+      provider: 'moa',
+      oneShotModel: true,
+    })])
+    expect(namespaceEmit).toHaveBeenCalledWith('run.queued', expect.objectContaining({
+      queue_length: 1,
+      queued_messages: [expect.objectContaining({
+        id: 'client-queue-id',
+        role: 'command',
+        content: '/moa 讨论下黄金走势',
+        queued: true,
+      })],
+    }))
+    expect(namespaceEmit).not.toHaveBeenCalledWith('session.command', expect.anything())
+  })
+
+  it('emits moa preset model details when starting an idle moa command', async () => {
+    const state = { messages: [], isWorking: false, events: [], queue: [] }
+    const { namespaceEmit, nsp, runQueuedItem, sessionMap, socket } = makeContext(state)
+    const { handleSessionCommand, parseSessionCommand } = await import('../../packages/server/src/services/hermes/run-chat/session-command')
+    const command = parseSessionCommand('/moa 讨论下黄金走势')!
+
+    await handleSessionCommand('session-1', command, {
+      nsp: nsp as any,
+      socket: socket as any,
+      sessionMap,
+      bridge: {} as any,
+      profile: 'default',
+      queueId: 'client-queue-id',
+      runQueuedItem,
+    })
+
+    expect(runQueuedItem).toHaveBeenCalledWith(socket, 'session-1', expect.objectContaining({
+      queue_id: 'client-queue-id',
+      input: '讨论下黄金走势',
+      displayInput: '/moa 讨论下黄金走势',
+      displayRole: 'command',
+      storageMessage: '/moa 讨论下黄金走势',
+      provider: 'moa',
+      model: 'default',
+      oneShotModel: true,
+    }), 'default')
+    expect(namespaceEmit).toHaveBeenCalledWith('session.command', expect.objectContaining({
+      action: 'moa',
+      started: true,
+      preset: 'default',
+      moa: {
+        preset: 'default',
+        reference_models: ['xai-oauth:grok-4.3', 'custom:fun-codex:gpt-5.5'],
+        aggregator: 'glm:glm-5.2',
+      },
+    }))
+  })
+
+  it('passes /moa through when MoA is not configured for the profile', async () => {
+    readConfigYamlForProfileMock.mockResolvedValueOnce({})
+    const state = { messages: [], isWorking: false, events: [], queue: [] }
+    const { namespaceEmit, nsp, runQueuedItem, sessionMap, socket } = makeContext(state)
+    const { handleSessionCommand, parseSessionCommand } = await import('../../packages/server/src/services/hermes/run-chat/session-command')
+    const command = parseSessionCommand('/moa 讨论下黄金走势')!
+
+    const handled = await handleSessionCommand('session-1', command, {
+      nsp: nsp as any,
+      socket: socket as any,
+      sessionMap,
+      bridge: {} as any,
+      profile: 'default',
+      queueId: 'client-queue-id',
+      runQueuedItem,
+    })
+
+    expect(handled).toBe(false)
+    expect(runQueuedItem).not.toHaveBeenCalled()
+    expect(state.queue).toEqual([])
+    expect(addMessageMock).not.toHaveBeenCalled()
+    expect(namespaceEmit).not.toHaveBeenCalled()
   })
 
   it('creates a new slash-command session with a command-derived title', async () => {

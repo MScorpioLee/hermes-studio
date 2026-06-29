@@ -2,6 +2,7 @@ import type { Server, Socket } from 'socket.io'
 import { addMessage, clearSessionMessages, createBranchedSession, createSession, getSession, getSessionDetail, renameSession, updateSessionStats } from '../../../db/hermes/session-store'
 import { logger } from '../../logger'
 import type { AgentBridgeClient } from '../agent-bridge'
+import { readConfigYamlForProfile } from '../../config-helpers'
 import { flushBridgePendingToDb } from './bridge-message'
 import { buildDbHistory, estimateSnapshotAwareHistoryUsage, forceCompressBridgeHistory, getOrCreateSession, replaceState } from './compression'
 import { handleAbort } from './abort'
@@ -17,6 +18,7 @@ type CommandName =
   | 'skill'
   | 'learn'
   | 'plan'
+  | 'moa'
   | 'goal'
   | 'subgoal'
   | 'clear'
@@ -66,6 +68,13 @@ interface BranchSessionSummary {
   workspace: string | null
 }
 
+interface MoaPresetInfo {
+  name: string
+  referenceModels: string[]
+  aggregator: string
+  configured: boolean
+}
+
 const COMMAND_ALIASES: Record<string, CommandName> = {
   usage: 'usage',
   status: 'status',
@@ -74,6 +83,7 @@ const COMMAND_ALIASES: Record<string, CommandName> = {
   skill: 'skill',
   learn: 'learn',
   plan: 'plan',
+  moa: 'moa',
   goal: 'goal',
   subgoal: 'subgoal',
   clear: 'clear',
@@ -107,12 +117,12 @@ export async function handleSessionCommand(
   sessionId: string,
   command: ParsedSessionCommand,
   ctx: SessionCommandContext,
-): Promise<void> {
+): Promise<boolean | void> {
   const state = getOrCreateSession(ctx.sessionMap, sessionId)
   ctx.socket.join(`session:${sessionId}`)
   ensureCommandSession(sessionId, command, ctx)
   const isKnownCommand = Boolean(COMMAND_ALIASES[command.rawName])
-  if (command.name !== 'plan' && command.name !== 'skill' && command.name !== 'learn' && command.name !== 'branch' && isKnownCommand) {
+  if (command.name !== 'plan' && command.name !== 'skill' && command.name !== 'learn' && command.name !== 'branch' && command.name !== 'moa' && isKnownCommand) {
     persistCommandMessage(sessionId, state, `/${command.rawName}${command.args ? ` ${command.args}` : ''}`)
   }
 
@@ -291,6 +301,60 @@ export async function handleSessionCommand(
       terminal: !state.isWorking,
       message: result?.message || 'Learn command is not available.',
     })
+    return
+  }
+
+  if (command.name === 'moa') {
+    const displayCommand = `/${command.rawName}${command.args ? ` ${command.args}` : ''}`
+    const presetInfo = await resolveDefaultMoaPresetInfo(ctx.profile)
+    if (!presetInfo.configured) return false
+
+    if (!command.args) {
+      emitCommand({
+        ok: false,
+        action: 'moa',
+        terminal: !state.isWorking,
+        message: 'Usage: /moa <prompt>',
+      })
+      return
+    }
+
+    const preset = presetInfo.name
+    const next: QueuedRun = {
+      queue_id: ctx.queueId || `queue_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      input: command.args,
+      displayInput: displayCommand,
+      displayRole: 'command',
+      storageMessage: displayCommand,
+      model: preset,
+      provider: 'moa',
+      model_groups: ctx.model_groups,
+      instructions: ctx.instructions,
+      profile: ctx.profile,
+      source: 'cli',
+      originSocketId: ctx.socket.id,
+      oneShotModel: true,
+    }
+
+    if (state.isWorking) {
+      state.queue.push(next)
+      emitQueuedState(ctx, sessionId, state)
+      return
+    }
+
+    emitCommand({
+      action: 'moa',
+      terminal: false,
+      started: true,
+      message: `MoA one-shot queued with preset ${preset}.`,
+      preset,
+      moa: {
+        preset,
+        reference_models: presetInfo.referenceModels,
+        aggregator: presetInfo.aggregator,
+      },
+    })
+    ctx.runQueuedItem(ctx.socket, sessionId, next, ctx.profile)
     return
   }
 
@@ -825,6 +889,38 @@ export async function handleSessionCommand(
       })
       return
     }
+  }
+}
+
+function moaSlotLabel(slot: unknown): string {
+  if (!slot || typeof slot !== 'object') return ''
+  const data = slot as Record<string, unknown>
+  const provider = typeof data.provider === 'string' ? data.provider.trim() : ''
+  const model = typeof data.model === 'string' ? data.model.trim() : ''
+  if (provider && model) return `${provider}:${model}`
+  return provider || model
+}
+
+async function resolveDefaultMoaPresetInfo(profile: string): Promise<MoaPresetInfo> {
+  try {
+    const config = await readConfigYamlForProfile(profile)
+    const moa = config?.moa
+    if (!moa || typeof moa !== 'object' || !moa.presets || typeof moa.presets !== 'object') {
+      return { name: 'default', referenceModels: [], aggregator: '', configured: false }
+    }
+    const defaultPreset = typeof moa?.default_preset === 'string' ? moa.default_preset.trim() : ''
+    const presets = Object.keys(moa.presets)
+    const name = defaultPreset || presets[0] || 'default'
+    const preset = (moa.presets as Record<string, unknown>)[name]
+    const presetData = preset && typeof preset === 'object' ? preset as Record<string, unknown> : {}
+    const referenceModels = Array.isArray(presetData.reference_models)
+      ? presetData.reference_models.map(moaSlotLabel).filter(Boolean)
+      : []
+    const aggregator = moaSlotLabel(presetData.aggregator)
+    const enabled = presetData.enabled === undefined || presetData.enabled === true
+    return { name, referenceModels, aggregator, configured: enabled && referenceModels.length > 0 && Boolean(aggregator) }
+  } catch {
+    return { name: 'default', referenceModels: [], aggregator: '', configured: false }
   }
 }
 

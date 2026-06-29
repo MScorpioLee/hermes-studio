@@ -21,6 +21,17 @@ export type ContentBlock = ContentBlockImport
 export const LIVE_CHAT_MESSAGE_PAGE_SIZE = 150
 export const LIVE_CHAT_MAX_LOADED_MESSAGES = 300
 
+function moaReferenceLabel(evt: RunEvent): string {
+  const label = typeof evt.label === 'string' && evt.label.trim()
+    ? evt.label.trim()
+    : 'reference'
+  const index = Number.isFinite(Number(evt.index)) ? Number(evt.index) : undefined
+  const count = Number.isFinite(Number(evt.count)) ? Number(evt.count) : undefined
+  return index != null && count != null
+    ? `${index}/${count} ${label}`
+    : label
+}
+
 export interface Attachment {
   id: string
   name: string
@@ -250,6 +261,35 @@ function runtimePayloadText(value: unknown): string {
   return String(value)
 }
 
+function parsePersistedMoaToolPayload(toolName: string | undefined, value: unknown): { preview?: string; result?: unknown } | null {
+  if (toolName !== 'moa_reference' && toolName !== 'moa_aggregating') return null
+  const payload = typeof value === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(value)
+        } catch {
+          return null
+        }
+      })()
+    : value
+  if (!payload || typeof payload !== 'object') return null
+  const data = payload as Record<string, unknown>
+  const preview = typeof data.preview === 'string'
+    ? data.preview
+    : typeof data.label === 'string'
+      ? data.label
+      : typeof data.aggregator === 'string'
+        ? data.aggregator
+        : undefined
+  const result = data.text ?? data.result
+  return { preview, result }
+}
+
+function isPersistedMoaToolDisplay(msg: HermesMessage): boolean {
+  return (msg.role === 'moa' || msg.display_role === 'tool')
+    && (msg.tool_name === 'moa_reference' || msg.tool_name === 'moa_aggregating')
+}
+
 function runtimeToolOutputHasError(value: unknown): boolean {
   return typeof value === 'string' && isToolOutputError(value)
 }
@@ -382,15 +422,17 @@ function mapHermesMessages(msgs: HermesMessage[]): Message[] {
       continue
     }
 
-    // Tool result messages
-    if (msg.role === 'tool') {
+    // Tool result messages. MoA display rows are persisted with role "moa"
+    // so they can render as tool lines without becoming model-context tool results.
+    if (msg.role === 'tool' || isPersistedMoaToolDisplay(msg)) {
       const tcId = msg.tool_call_id || ''
       const toolName = msg.tool_name || toolNameMap.get(tcId) || undefined
       const toolArgs = toolArgsMap.has(tcId) ? toolArgsMap.get(tcId) : undefined
+      const moaPayload = parsePersistedMoaToolPayload(toolName, (msg as any).content)
       // Extract a short preview from the content
-      let preview = ''
+      let preview = moaPayload?.preview || ''
       const contentText = runtimePayloadText((msg as any).content)
-      if (contentText) {
+      if (!preview && contentText) {
         try {
           const parsed = typeof (msg as any).content === 'string'
             ? JSON.parse(contentText)
@@ -416,7 +458,7 @@ function mapHermesMessages(msgs: HermesMessage[]): Message[] {
         toolCallId: tcId || undefined,
         toolArgs,
         toolPreview: typeof preview === 'string' ? preview.slice(0, 100) || undefined : undefined,
-        toolResult: runtimeToolPayloadOrUndefined((msg as any).content),
+        toolResult: moaPayload ? runtimeToolPayloadOrUndefined(moaPayload.result) : runtimeToolPayloadOrUndefined((msg as any).content),
         toolStatus: 'done',
         finishReason: readFinishReason(msg),
         runMarker: readRunMarker(msg),
@@ -429,7 +471,7 @@ function mapHermesMessages(msgs: HermesMessage[]): Message[] {
     const displayContent = msg.display_content ?? msg.content
     result.push({
       id: String(msg.id),
-      role: displayRole,
+      role: displayRole === 'moa' ? 'system' : displayRole,
       content: displayContent || '',
       timestamp: Math.round(msg.timestamp * 1000),
       reasoning: msg.reasoning ? msg.reasoning : undefined,
@@ -1170,6 +1212,8 @@ export const useChatStore = defineStore('chat', () => {
                     toolResult: output,
                   })
                 }
+              } else if (e.event === 'moa.reference' || e.event === 'moa.aggregating') {
+                handleMoaEvent(sessionId, e as RunEvent)
               } else if (String(e.event || '').startsWith('subagent.')) {
                 handleSubagentEvent(sessionId, e as RunEvent)
               }
@@ -1360,6 +1404,16 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
+  function settleRuntimeDisplayForCommand(sessionId: string) {
+    const msgs = getSessionMsgs(sessionId)
+    msgs.forEach((m, i) => {
+      if (m.isStreaming) updateMessage(sessionId, m.id, { isStreaming: false })
+      if (m.role === 'tool' && m.toolStatus === 'running') {
+        msgs[i] = { ...m, toolStatus: 'done' }
+      }
+    })
+  }
+
   function clearAgentEventMessages(sessionId: string) {
     const s = sessions.value.find(s => s.id === sessionId)
     if (!s) return
@@ -1431,6 +1485,67 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
+  function handleMoaEvent(sessionId: string, evt: RunEvent) {
+    const eventName = String(evt.event || '')
+    if (eventName !== 'moa.reference' && eventName !== 'moa.aggregating') return
+
+    const msgs = getSessionMsgs(sessionId)
+    if (eventName === 'moa.reference') {
+      const label = moaReferenceLabel(evt)
+      const index = Number.isFinite(Number(evt.index)) ? Number(evt.index) : label
+      const toolCallId = `moa:reference:${evt.run_id || 'run'}:${index}`
+      const output = typeof evt.text === 'string'
+        ? evt.text
+        : typeof evt.delta === 'string'
+          ? evt.delta
+          : ''
+      const update: Partial<Message> = {
+        toolName: 'moa_reference',
+        toolCallId,
+        toolPreview: label.slice(0, 220),
+        toolStatus: 'done',
+        toolResult: output,
+      }
+      const existing = msgs.find(m => m.role === 'tool' && m.toolCallId === toolCallId)
+      if (existing) {
+        updateMessage(sessionId, existing.id, update)
+        return
+      }
+      addMessage(sessionId, {
+        id: uid(),
+        role: 'tool',
+        content: '',
+        timestamp: Date.now(),
+        ...update,
+      })
+      return
+    }
+
+    const aggregator = typeof evt.aggregator === 'string' && evt.aggregator.trim()
+      ? evt.aggregator.trim()
+      : 'aggregator'
+    const toolCallId = `moa:aggregating:${evt.run_id || 'run'}`
+    const update: Partial<Message> = {
+      toolName: 'moa_aggregating',
+      toolCallId,
+      toolPreview: aggregator.slice(0, 220),
+      toolStatus: 'running',
+      toolArgs: { aggregator },
+    }
+    const existing = msgs.find(m => m.role === 'tool' && m.toolCallId === toolCallId)
+    if (existing) {
+      updateMessage(sessionId, existing.id, update)
+      return
+    }
+    addMessage(sessionId, {
+      id: uid(),
+      role: 'tool',
+      content: '',
+      timestamp: Date.now(),
+      ...update,
+    })
+  }
+
   function addAgentErrorMessage(sessionId: string, error?: unknown) {
     const message = errorMessageText(error)
     const content = message ? `Error: ${message}` : 'Run failed'
@@ -1482,6 +1597,13 @@ export const useChatStore = defineStore('chat', () => {
       streamStates.value.delete(sid)
       serverWorking.value.delete(sid)
       pendingForkCommands.value.delete(sid)
+      const msgs = getSessionMsgs(sid)
+      msgs.forEach((m, i) => {
+        if (m.isStreaming) updateMessage(sid, m.id, { isStreaming: false })
+        if (m.role === 'tool' && m.toolStatus === 'running') {
+          msgs[i] = { ...m, toolStatus: (evt as any).ok === false ? 'error' : 'done' }
+        }
+      })
     }
 
     if (action === 'clear' && command === 'clear') {
@@ -1977,6 +2099,7 @@ export const useChatStore = defineStore('chat', () => {
     const isBridgeCompressCommand = isBridgeSlashCommand && /^\/compress(?:\s|$)/i.test(trimmedContent)
     const isBridgePlanCommand = isBridgeSlashCommand && /^\/plan(?:\s|$)/i.test(trimmedContent)
     const isBridgeSkillCommand = isBridgeSlashCommand && /^\/skill(?:\s|$)/i.test(trimmedContent)
+    const isBridgeMoaCommand = isBridgeSlashCommand && /^\/moa(?:\s|$)/i.test(trimmedContent)
     const isBridgeGoalCommand = isBridgeSlashCommand && /^\/goal(?:\s|$)/i.test(trimmedContent)
     const isBridgeForkCommand = isBridgeSlashCommand && /^\/fork(?:\s|$)/i.test(trimmedContent)
     const shouldOptimisticallyShowRunStatus = !isCodingAgentSession && !isBridgeForkCommand
@@ -1985,7 +2108,15 @@ export const useChatStore = defineStore('chat', () => {
       if (pendingForkCommands.value.has(sid)) return
       pendingForkCommands.value = new Set(pendingForkCommands.value).add(sid)
     }
-    const shouldQueue = wasLiveBeforeSend && (!isBridgeSlashCommand || isBridgePlanCommand || isBridgeSkillCommand)
+    const shouldQueue = wasLiveBeforeSend && (
+      !isBridgeSlashCommand ||
+      isBridgePlanCommand ||
+      isBridgeSkillCommand ||
+      isBridgeMoaCommand
+    )
+    if (isBridgeSlashCommand && !shouldQueue && !wasLiveBeforeSend) {
+      settleRuntimeDisplayForCommand(sid)
+    }
 
     const userMsg: Message = {
       id: uid(),
@@ -2426,6 +2557,18 @@ export const useChatStore = defineStore('chat', () => {
                 noteReasoningStart(newId)
               }
 
+              break
+            }
+
+            case 'moa.reference': {
+              runHadToolActivity = true
+              handleMoaEvent(sid, evt)
+              break
+            }
+
+            case 'moa.aggregating': {
+              runHadToolActivity = true
+              handleMoaEvent(sid, evt)
               break
             }
 
@@ -3011,6 +3154,18 @@ export const useChatStore = defineStore('chat', () => {
           break
         }
 
+        case 'moa.reference': {
+          runHadToolActivity = true
+          handleMoaEvent(sid, evt)
+          break
+        }
+
+        case 'moa.aggregating': {
+          runHadToolActivity = true
+          handleMoaEvent(sid, evt)
+          break
+        }
+
         case 'reasoning.available': {
           const msgs = getSessionMsgs(sid)
           const last = msgs[msgs.length - 1]
@@ -3360,6 +3515,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!content.trim()) return
 
     const messageId = peer?.id != null ? String(peer.id) : ''
+    const isPeerCommand = peer?.role === 'command'
     const msgs = getSessionMsgs(sid)
     if (messageId && msgs.some(msg => msg.id === messageId)) {
       serverWorking.value.add(sid)
@@ -3367,9 +3523,13 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
     if (messageId && (queuedUserMessages.value.get(sid) || []).some(msg => msg.id === messageId)) {
-      serverWorking.value.add(sid)
-      resumeServerWorkingRun(sid, true)
-      return
+      if (isPeerCommand && !peer?.queued) {
+        dropQueuedUserMessage(sid, messageId)
+      } else {
+        serverWorking.value.add(sid)
+        resumeServerWorkingRun(sid, true)
+        return
+      }
     }
 
     const timestamp = typeof peer?.timestamp === 'number' && Number.isFinite(peer.timestamp)
@@ -3378,14 +3538,14 @@ export const useChatStore = defineStore('chat', () => {
 
     const message: Message = {
       id: messageId || uid(),
-      role: peer?.role === 'command' ? 'command' : 'user',
+      role: isPeerCommand ? 'command' : 'user',
       content,
       timestamp,
       queued: !!peer?.queued,
-      systemType: peer?.role === 'command' ? 'command' : undefined,
+      systemType: isPeerCommand ? 'command' : undefined,
     }
     const wasDequeued = messageId ? consumeDequeuedQueueId(sid, messageId) : false
-    if (peer?.queued || (!wasDequeued && isSessionLive(sid))) {
+    if (peer?.queued || (!isPeerCommand && !wasDequeued && isSessionLive(sid))) {
       enqueueUserMessage(sid, message)
     } else {
       addMessage(sid, message)

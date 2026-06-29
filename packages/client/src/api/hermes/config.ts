@@ -120,6 +120,32 @@ export interface AuxiliaryModelsResponse {
   auxiliary: AuxiliaryModelsConfig
 }
 
+export interface MoaModelSlot {
+  provider: string
+  model: string
+}
+
+export interface MoaPreset {
+  enabled: boolean
+  reference_models: MoaModelSlot[]
+  aggregator: MoaModelSlot
+  reference_temperature: number
+  aggregator_temperature: number
+  max_tokens: number
+}
+
+export interface MoaConfig {
+  default_preset: string
+  active_preset?: string
+  presets: Record<string, MoaPreset>
+  reference_models: MoaModelSlot[]
+  aggregator: MoaModelSlot
+  reference_temperature: number
+  aggregator_temperature: number
+  max_tokens: number
+  enabled: boolean
+}
+
 export async function fetchConfig(sections?: string[]): Promise<AppConfig> {
   const query = sections ? `?sections=${sections.join(',')}` : ''
   return request<AppConfig>(`/api/hermes/config${query}`)
@@ -147,6 +173,20 @@ export async function saveAuxiliaryModels(auxiliary: AuxiliaryModelsConfig): Pro
   return request<{ success: boolean; auxiliary: AuxiliaryModelsConfig }>('/api/hermes/config/auxiliary-models', {
     method: 'PUT',
     body: JSON.stringify({ auxiliary }),
+  })
+}
+
+export async function fetchMoaConfig(): Promise<MoaConfig> {
+  return request<MoaConfig>('/api/hermes/config/moa')
+}
+
+export async function saveMoaConfig(moa: MoaConfig): Promise<{
+  success: boolean
+  moa: MoaConfig
+}> {
+  return request<{ success: boolean; moa: MoaConfig }>('/api/hermes/config/moa', {
+    method: 'PUT',
+    body: JSON.stringify({ moa }),
   })
 }
 

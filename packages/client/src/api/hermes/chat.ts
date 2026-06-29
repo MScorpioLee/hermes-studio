@@ -50,6 +50,17 @@ export interface RunEvent {
   delta?: string
   /** Payload text for `reasoning.delta` / `thinking.delta` / `reasoning.available` events. */
   text?: string
+  /** MoA reference metadata forwarded as display-only reasoning. */
+  label?: string
+  index?: number
+  count?: number
+  aggregator?: string
+  preset?: string
+  moa?: {
+    preset?: string
+    reference_models?: string[]
+    aggregator?: string
+  }
   tool?: string
   name?: string
   preview?: string
@@ -654,6 +665,8 @@ export function connectChatRun(requestedProfile?: string | null, transport: Chat
     chatRunSocket.on('reasoning.delta', globalReasoningDeltaHandler)
     chatRunSocket.on('thinking.delta', globalThinkingDeltaHandler)
     chatRunSocket.on('reasoning.available', globalReasoningAvailableHandler)
+    chatRunSocket.on('moa.reference', globalReasoningDeltaHandler)
+    chatRunSocket.on('moa.aggregating', globalAgentEventHandler)
 
     // Tool events
     chatRunSocket.on('tool.started', globalToolStartedHandler)
