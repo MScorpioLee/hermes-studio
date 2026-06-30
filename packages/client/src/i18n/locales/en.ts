@@ -82,6 +82,7 @@ export default {
     edit: 'Edit',
     save: 'Save',
     retry: 'Retry',
+    reset: 'Reset',
     saved: 'Saved',
     update: 'Update',
     create: 'Create',
@@ -425,6 +426,7 @@ export default {
     outlineEmpty: 'No conversation content',
     outlineUserQuestion: 'User question',
     inputPlaceholder: 'Type a message... (Enter to send, Shift+Enter for new line)',
+    inputHeightResizeHint: 'Drag to resize the chat input. Double-click to reset.',
     slashCommandArgs: {
       message: '<message>',
       title: '<title>',
@@ -1367,6 +1369,7 @@ export default {
     export: 'Export',
     rename: 'Rename',
     delete: 'Delete',
+    editConfig: 'Edit Config',
     switchTo: 'Switch Hermes Profile',
     switchConfirm: 'This will run `hermes profile use {name}` and change the active Hermes CLI profile. Continue?',
     switchSuccess: 'Hermes active profile switched to "{name}"',
@@ -1509,6 +1512,8 @@ export default {
       themeLight: 'Light',
       themeDark: 'Dark',
       themeSystem: 'System',
+      chatInputHeight: 'Chat input height',
+      chatInputHeightHint: 'Default desktop chat input height in pixels. Mobile keeps auto height.'
     },
     agent: {
       maxTurns: 'Max Turns',
