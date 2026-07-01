@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { getActiveProfileName, getApiKey, getSocketIoConnectionBaseUrl, getSocketIoPathValue } from '@/api/client'
+import { getActiveProfileName, getApiKey, getSocketIoConnectionBaseUrl, getSocketIoPathValue, getSocketIoTransportsValue } from '@/api/client'
 
 export interface PetActivity {
   busy?: boolean
@@ -44,7 +44,8 @@ export function connectPetStateSocket(profile?: string | null): Socket {
     path: getSocketIoPathValue(),
     auth: { token: getApiKey() },
     query: { profile: nextProfile },
-    transports: ['websocket', 'polling'],
+    transports: getSocketIoTransportsValue(),
+    tryAllTransports: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,

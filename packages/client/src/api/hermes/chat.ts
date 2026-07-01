@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { getApiKey, getSocketIoConnectionBaseUrl, getSocketIoPathValue } from '../client'
+import { getApiKey, getSocketIoConnectionBaseUrl, getSocketIoPathValue, getSocketIoTransportsValue } from '../client'
 import type { ProviderApiMode } from './system'
 
 export type ContentBlock =
@@ -650,7 +650,8 @@ export function connectChatRun(requestedProfile?: string | null, transport: Chat
     path: getSocketIoPathValue(),
     auth: { token },
     query: { profile },
-    transports: ['websocket', 'polling'],
+    transports: getSocketIoTransportsValue(),
+    tryAllTransports: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,

@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client'
-import { request, getApiKey, getSocketIoConnectionBaseUrl, getSocketIoPathValue } from '../client'
+import { request, getApiKey, getSocketIoConnectionBaseUrl, getSocketIoPathValue, getSocketIoTransportsValue } from '../client'
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -95,7 +95,8 @@ export function connectGroupChat(opts?: { userId?: string; userName?: string; de
             description: opts?.description || localStorage.getItem('gc_user_description') || undefined,
             authUserId: opts?.authUserId,
         },
-        transports: ['websocket', 'polling'],
+        transports: getSocketIoTransportsValue(),
+        tryAllTransports: true,
         reconnection: true,
         reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,

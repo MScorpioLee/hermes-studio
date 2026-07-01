@@ -268,6 +268,10 @@ export function getSocketIoConnectionBaseUrl(): string {
   }
 }
 
+export function getSocketIoTransportsValue(): Array<'polling' | 'websocket'> {
+  return ['polling', 'websocket']
+}
+
 export function buildWebSocketUrl(path: string, directDevPort?: string | number): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   const base = getBaseUrl()

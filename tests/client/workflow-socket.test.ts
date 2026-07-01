@@ -12,6 +12,7 @@ vi.mock('@/api/client', () => ({
   getApiKey: vi.fn(() => 'test-key'),
   getSocketIoConnectionBaseUrl: vi.fn(() => 'http://localhost:3000'),
   getSocketIoPathValue: vi.fn(() => '/socket.io'),
+  getSocketIoTransportsValue: vi.fn(() => ['polling', 'websocket']),
 }))
 
 describe('workflow socket client', () => {
@@ -39,6 +40,8 @@ describe('workflow socket client', () => {
     expect(ioMock).toHaveBeenCalledTimes(1)
     expect(ioMock).toHaveBeenCalledWith('http://localhost:3000/workflow', expect.objectContaining({
       path: '/socket.io',
+      transports: ['polling', 'websocket'],
+      tryAllTransports: true,
     }))
     expect(sockets[0].disconnect).not.toHaveBeenCalled()
   })

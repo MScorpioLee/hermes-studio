@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { getApiKey, getSocketIoConnectionBaseUrl, getActiveProfileName, getSocketIoPathValue } from '../client'
+import { getApiKey, getSocketIoConnectionBaseUrl, getActiveProfileName, getSocketIoPathValue, getSocketIoTransportsValue } from '../client'
 import type { RunEvent, StartRunRequest } from './chat'
 
 export interface GlobalAgentSocketOpenRequest {
@@ -59,7 +59,8 @@ export function connectGlobalAgent(profile?: string | null): Socket {
       token: getApiKey(),
       profile: nextProfile,
     },
-    transports: ['websocket', 'polling'],
+    transports: getSocketIoTransportsValue(),
+    tryAllTransports: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
