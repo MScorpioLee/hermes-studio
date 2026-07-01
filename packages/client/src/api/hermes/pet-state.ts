@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { getActiveProfileName, getApiKey, getBaseUrlValue, getSocketIoPathValue } from '@/api/client'
+import { getActiveProfileName, getApiKey, getSocketIoConnectionBaseUrl, getSocketIoPathValue } from '@/api/client'
 
 export interface PetActivity {
   busy?: boolean
@@ -40,7 +40,7 @@ export function connectPetStateSocket(profile?: string | null): Socket {
   }
 
   socketProfile = nextProfile
-  socket = io(`${getBaseUrlValue()}/pet-state`, {
+  socket = io(`${getSocketIoConnectionBaseUrl()}/pet-state`, {
     path: getSocketIoPathValue(),
     auth: { token: getApiKey() },
     query: { profile: nextProfile },

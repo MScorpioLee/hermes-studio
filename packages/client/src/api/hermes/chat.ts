@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { getBaseUrlValue, getApiKey, getSocketIoPathValue } from '../client'
+import { getApiKey, getSocketIoConnectionBaseUrl, getSocketIoPathValue } from '../client'
 import type { ProviderApiMode } from './system'
 
 export type ContentBlock =
@@ -627,7 +627,7 @@ export function connectChatRun(requestedProfile?: string | null, transport: Chat
     chatRunSocketProfile = null
   }
 
-  const baseUrl = getBaseUrlValue()
+  const baseUrl = getSocketIoConnectionBaseUrl()
   const token = getApiKey()
 
   // Get active profile from store (authoritative source)

@@ -69,10 +69,11 @@ describe('auth API base URL handling', () => {
       json: () => Promise.resolve({ ok: true }),
     })
 
-    const { getBaseUrlValue, getSocketIoPathValue, request } = await loadApiClientWithBaseUrl('/app/hermes-studio/')
+    const { getBaseUrlValue, getSocketIoConnectionBaseUrl, getSocketIoPathValue, request } = await loadApiClientWithBaseUrl('/app/hermes-studio/')
     await request('/api/hermes/sessions')
 
     expect(getBaseUrlValue()).toBe('/app/hermes-studio')
+    expect(getSocketIoConnectionBaseUrl()).toBe(window.location.origin)
     expect(getSocketIoPathValue()).toBe('/app/hermes-studio/socket.io')
     expect(mockFetch).toHaveBeenCalledWith('/app/hermes-studio/api/hermes/sessions', expect.any(Object))
   })

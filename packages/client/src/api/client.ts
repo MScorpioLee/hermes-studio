@@ -257,6 +257,17 @@ export function getSocketIoPathValue(): string {
   return `${baseUrlPathname(getBaseUrl())}/socket.io`
 }
 
+export function getSocketIoConnectionBaseUrl(): string {
+  const base = getBaseUrl()
+  if (!base) return ''
+  try {
+    const baseUrl = new URL(base, currentOrigin())
+    return `${baseUrl.protocol}//${baseUrl.host}`
+  } catch {
+    return ''
+  }
+}
+
 export function buildWebSocketUrl(path: string, directDevPort?: string | number): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   const base = getBaseUrl()

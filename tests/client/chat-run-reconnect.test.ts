@@ -76,7 +76,7 @@ vi.mock('socket.io-client', () => {
 
 vi.mock('../../packages/client/src/api/client', () => ({
   getApiKey: () => 'test-token',
-  getBaseUrlValue: () => '',
+  getSocketIoConnectionBaseUrl: () => '',
   getSocketIoPathValue: () => '/socket.io',
 }))
 

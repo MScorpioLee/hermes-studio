@@ -10,7 +10,7 @@ vi.mock('socket.io-client', () => ({
 vi.mock('@/api/client', () => ({
   getActiveProfileName: vi.fn(() => 'default'),
   getApiKey: vi.fn(() => 'test-key'),
-  getBaseUrlValue: vi.fn(() => 'http://localhost:3000'),
+  getSocketIoConnectionBaseUrl: vi.fn(() => 'http://localhost:3000'),
   getSocketIoPathValue: vi.fn(() => '/socket.io'),
 }))
 
@@ -37,6 +37,9 @@ describe('workflow socket client', () => {
 
     expect(second).toBe(first)
     expect(ioMock).toHaveBeenCalledTimes(1)
+    expect(ioMock).toHaveBeenCalledWith('http://localhost:3000/workflow', expect.objectContaining({
+      path: '/socket.io',
+    }))
     expect(sockets[0].disconnect).not.toHaveBeenCalled()
   })
 
