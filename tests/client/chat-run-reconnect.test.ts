@@ -77,6 +77,7 @@ vi.mock('socket.io-client', () => {
 vi.mock('../../packages/client/src/api/client', () => ({
   getApiKey: () => 'test-token',
   getBaseUrlValue: () => '',
+  getSocketIoPathValue: () => '/socket.io',
 }))
 
 describe('chat-run socket reconnect handling', () => {

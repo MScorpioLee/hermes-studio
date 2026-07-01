@@ -11,6 +11,7 @@ vi.mock('@/api/client', () => ({
   getActiveProfileName: vi.fn(() => 'default'),
   getApiKey: vi.fn(() => 'test-key'),
   getBaseUrlValue: vi.fn(() => 'http://localhost:3000'),
+  getSocketIoPathValue: vi.fn(() => '/socket.io'),
 }))
 
 describe('workflow socket client', () => {
