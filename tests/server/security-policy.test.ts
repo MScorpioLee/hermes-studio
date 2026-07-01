@@ -71,4 +71,32 @@ describe('server security policy', () => {
     expect(response.headers.get('content-security-policy')).toContain("default-src 'self'")
     expect(response.headers.get('strict-transport-security')).toContain('max-age=31536000')
   })
+
+  it('allows the fnOS gateway entry to render inside the desktop iframe', async () => {
+    const previousBasePath = process.env.HERMES_WEB_UI_PUBLIC_BASE_PATH
+    process.env.HERMES_WEB_UI_PUBLIC_BASE_PATH = '/app/hermes-studio'
+
+    try {
+      const app = new Koa()
+      app.use(securityHeaders())
+      app.use((ctx) => {
+        ctx.body = '<!doctype html><div id="app"></div>'
+      })
+      const server = app.listen(0)
+      servers.push(server)
+      await new Promise<void>((resolve) => server.once('listening', () => resolve()))
+      const address = server.address()
+      if (!address || typeof address === 'string') throw new Error('expected tcp server')
+
+      const response = await fetch(`http://127.0.0.1:${address.port}/app/hermes-studio/`)
+      const csp = response.headers.get('content-security-policy') || ''
+
+      expect(response.headers.get('x-frame-options')).not.toBe('DENY')
+      expect(csp).not.toContain("frame-ancestors 'none'")
+      expect(csp).toContain("frame-ancestors 'self'")
+    } finally {
+      if (previousBasePath == null) delete process.env.HERMES_WEB_UI_PUBLIC_BASE_PATH
+      else process.env.HERMES_WEB_UI_PUBLIC_BASE_PATH = previousBasePath
+    }
+  })
 })

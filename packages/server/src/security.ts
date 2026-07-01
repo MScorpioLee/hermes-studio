@@ -97,17 +97,23 @@ function isHttpsRequest(ctx: Context): boolean {
   return forwardedProto === 'https'
 }
 
+function isEmbeddedGatewayMode(): boolean {
+  const publicBasePath = String(process.env.HERMES_WEB_UI_PUBLIC_BASE_PATH || '').trim()
+  return !!publicBasePath && publicBasePath !== '/'
+}
+
 export function securityHeaders(): Middleware {
   return async (ctx, next) => {
+    const allowSameOriginFrame = isEmbeddedGatewayMode()
     ctx.set('X-Content-Type-Options', 'nosniff')
-    ctx.set('X-Frame-Options', 'DENY')
+    ctx.set('X-Frame-Options', allowSameOriginFrame ? 'SAMEORIGIN' : 'DENY')
     ctx.set('Referrer-Policy', 'no-referrer')
     ctx.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
     ctx.set('Content-Security-Policy', [
       "default-src 'self'",
       "base-uri 'self'",
       "object-src 'none'",
-      "frame-ancestors 'none'",
+      allowSameOriginFrame ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
       "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
