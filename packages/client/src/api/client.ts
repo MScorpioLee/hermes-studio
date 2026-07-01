@@ -17,6 +17,10 @@ function isDesktopShell(): boolean {
     (window as typeof window & { hermesDesktop?: { isDesktop?: boolean } }).hermesDesktop?.isDesktop === true
 }
 
+function hasPackagedPublicBasePath(): boolean {
+  return !!DEFAULT_BASE_URL && !/^https?:\/\//i.test(DEFAULT_BASE_URL)
+}
+
 async function ensureDesktopAuthReady(): Promise<void> {
   if (typeof window === 'undefined' || getApiKey()) return
   const bridge = (window as typeof window & {
@@ -30,6 +34,7 @@ async function ensureDesktopAuthReady(): Promise<void> {
 function getBaseUrl(): string {
   if (import.meta.env.VITE_HERMES_PREVIEW === '1') return DEFAULT_BASE_URL
   if (isDesktopShell()) return DEFAULT_BASE_URL
+  if (hasPackagedPublicBasePath()) return DEFAULT_BASE_URL
   return localStorage.getItem('hermes_server_url') || DEFAULT_BASE_URL
 }
 
