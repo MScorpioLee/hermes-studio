@@ -71,10 +71,15 @@ jobs:
           FNPACK_BIN: /tmp/fnpack
           FNOS_TARGET_OS: linux
           FNOS_TARGET_ARCH: x64
+          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.17.0' }}
+          HERMES_DESKTOP_NODE_VERSION: 24.15.0
+          HERMES_DESKTOP_PYTHON_VERSION: "3.12"
         run: npm run build:fnos
 
       - name: Create fnOS release metadata
         id: package_meta
+        env:
+          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.17.0' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -93,7 +98,16 @@ jobs:
             "packaging_repo": "https://github.com/${GITHUB_REPOSITORY}",
             "platforms": ["x86"],
             "app_type": "native",
+            "update_source": "fnos-native",
             "service_port": 6060,
+            "gateway_prefix": "/app/hermes-studio",
+            "gateway_socket": "hermes-studio.sock",
+            "fnos_min_version": "1.1.3100",
+            "bundled_runtime": {
+              "node": "24.15.0",
+              "python": "3.12",
+              "hermes_agent": "${HERMES_VERSION}"
+            },
             "built_from": "${GITHUB_SHA}",
             "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }

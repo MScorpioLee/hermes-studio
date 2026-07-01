@@ -7,6 +7,7 @@ import pkg from './package.json'
 const FRONTEND_PORT = Number(process.env.HERMES_WEB_UI_FRONTEND_PORT || 8649)
 const BACKEND_PORT = process.env.HERMES_WEB_UI_BACKEND_PORT || '8648'
 const BACKEND = `http://127.0.0.1:${BACKEND_PORT}`
+const PUBLIC_BASE_PATH = process.env.HERMES_WEB_UI_PUBLIC_BASE_PATH?.trim() || '/'
 
 function createProxyConfig(): ProxyOptions {
   return {
@@ -32,6 +33,7 @@ function createProxyConfig(): ProxyOptions {
 
 export default defineConfig({
   root: 'packages/client',
+  base: PUBLIC_BASE_PATH.endsWith('/') ? PUBLIC_BASE_PATH : `${PUBLIC_BASE_PATH}/`,
   plugins: [vue()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),

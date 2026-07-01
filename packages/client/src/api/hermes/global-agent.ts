@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { getApiKey, getBaseUrlValue, getActiveProfileName } from '../client'
+import { getApiKey, getBaseUrlValue, getActiveProfileName, getSocketIoPathValue } from '../client'
 import type { RunEvent, StartRunRequest } from './chat'
 
 export interface GlobalAgentSocketOpenRequest {
@@ -54,6 +54,7 @@ export function connectGlobalAgent(profile?: string | null): Socket {
 
   socketProfile = nextProfile
   socket = io(`${getBaseUrlValue()}/global-agent`, {
+    path: getSocketIoPathValue(),
     auth: {
       token: getApiKey(),
       profile: nextProfile,

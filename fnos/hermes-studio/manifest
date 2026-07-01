@@ -1,13 +1,15 @@
 appname               = hermes-studio
-version               = 0.6.19
+version               = 0.6.22
 display_name          = Hermes Studio
-desc                  = Web dashboard and local runtime for Hermes Agent.
+desc                  = Hermes Studio 原生 fnOS 应用，内置 Node.js、Python 和 Hermes Agent 运行环境。
 platform              = x86
 source                = thirdparty
 maintainer            = MScorpioLee
 maintainer_url        = https://github.com/MScorpioLee/hermes-studio
 distributor           = MScorpioLee
 distributor_url       = https://github.com/MScorpioLee/hermes-studio
+os_min_version        = 1.1.3100
+install_dep_apps      =
 desktop_uidir         = ui
 desktop_applaunchname = hermes-studio.main
 service_port          = 6060

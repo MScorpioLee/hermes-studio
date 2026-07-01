@@ -1,24 +1,24 @@
 [
   {
-    "stepTitle": "Config",
+    "stepTitle": "配置设置",
     "items": [
       {
         "type": "tips",
-        "helpText": "Use the application data directory for persistent Hermes profiles, credentials, uploads, logs, and Web UI state. If Hermes Studio is running, saving this configuration restarts it with the selected port."
+        "helpText": "Web UI 端口用于直连访问和本机服务监听，统一网关入口仍为 /app/hermes-studio。Hermes Profile、凭证、上传文件、日志和 Web UI 状态保存在应用数据目录。Hermes Studio 正在运行时，保存后会按新端口重启服务。"
       },
       {
         "type": "text",
         "field": "wizard_service_port",
-        "label": "Web UI port",
+        "label": "Web UI 端口",
         "initValue": "6060",
         "rules": [
           {
             "required": true,
-            "message": "Please enter the Web UI port."
+            "message": "请输入 Web UI 端口。"
           },
           {
             "pattern": "^[0-9]+$",
-            "message": "The port must be numeric."
+            "message": "端口只能填写数字。"
           }
         ]
       }

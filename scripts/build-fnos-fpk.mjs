@@ -14,6 +14,9 @@ const packageName = 'hermes-studio'
 const targetOS = process.env.FNOS_TARGET_OS?.trim() || 'linux'
 const targetArch = process.env.FNOS_TARGET_ARCH?.trim() || 'x64'
 const fnpack = process.env.FNPACK_BIN?.trim() || 'fnpack'
+const bundledHermesVersion = process.env.HERMES_VERSION?.trim() || '0.17.0'
+const bundledNodeVersion = process.env.HERMES_DESKTOP_NODE_VERSION?.trim() || '24.15.0'
+const bundledPythonVersion = process.env.HERMES_DESKTOP_PYTHON_VERSION?.trim() || '3.12'
 
 const sourceDir = path.join(root, 'fnos', packageName)
 const buildRoot = path.join(root, '.fnos-build')
@@ -69,6 +72,18 @@ async function writePatchedManifest() {
   await writeFile(manifestPath, manifest)
 }
 
+async function writeRuntimeMetadata() {
+  const metadataPath = path.join(stageDir, 'config', 'runtime-metadata.json')
+  const metadata = JSON.parse(await readFile(metadataPath, 'utf8'))
+  metadata.bundled = {
+    ...(metadata.bundled || {}),
+    node: bundledNodeVersion,
+    python: bundledPythonVersion,
+    hermesAgent: bundledHermesVersion,
+  }
+  await writeFile(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`)
+}
+
 async function syncIcons() {
   const icon64 = path.join(root, 'packages', 'desktop', 'build', 'icons', '64x64.png')
   const icon256 = path.join(root, 'packages', 'desktop', 'build', 'icons', '256x256.png')
@@ -97,6 +112,7 @@ async function buildWebUi() {
   run('npm', ['run', 'build'], {
     env: {
       ...process.env,
+      HERMES_WEB_UI_PUBLIC_BASE_PATH: '/app/hermes-studio/',
       VITE_HERMES_DISABLE_VERSION_PREVIEW: '1',
     },
   })
@@ -229,6 +245,7 @@ await buildWebUi()
 await makeCommandScriptsExecutable()
 await syncIcons()
 await writePatchedManifest()
+await writeRuntimeMetadata()
 await copyServer()
 await copyRuntime()
 

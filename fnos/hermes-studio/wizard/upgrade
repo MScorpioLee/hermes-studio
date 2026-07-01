@@ -1,24 +1,24 @@
 [
   {
-    "stepTitle": "Upgrade",
+    "stepTitle": "更新设置",
     "items": [
       {
         "type": "tips",
-        "helpText": "Hermes Studio will stop existing Node.js and Python bridge processes before upgrading. Keep the current Web UI port unless you want to move the service."
+        "helpText": "更新前会停止旧的 Web UI、Hermes Agent 和 Bridge 进程，然后由飞牛应用中心安装新的原生 FPK。Hermes Profile、凭证、上传文件、日志和 Web UI 状态会保留。除非需要迁移服务端口，否则建议继续使用当前端口。"
       },
       {
         "type": "text",
         "field": "wizard_service_port",
-        "label": "Web UI port",
+        "label": "Web UI 端口",
         "initValue": "6060",
         "rules": [
           {
             "required": true,
-            "message": "Please enter the Web UI port."
+            "message": "请输入 Web UI 端口。"
           },
           {
             "pattern": "^[0-9]+$",
-            "message": "The port must be numeric."
+            "message": "端口只能填写数字。"
           }
         ]
       }

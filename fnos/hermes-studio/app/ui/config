@@ -2,12 +2,13 @@
   ".url": {
     "hermes-studio.main": {
       "title": "Hermes Studio",
-      "desc": "Hermes Studio",
+      "desc": "Hermes Studio Web UI",
       "icon": "images/icon_{0}.png",
-      "type": "url",
-      "protocol": "http",
-      "port": "${wizard_service_port}",
-      "url": "/",
+      "type": "iframe",
+      "protocol": "",
+      "gatewaySocket": "hermes-studio.sock",
+      "gatewayPrefix": "/app/hermes-studio",
+      "url": "/app/hermes-studio/",
       "allUsers": true,
       "noDisplay": false,
       "control": {

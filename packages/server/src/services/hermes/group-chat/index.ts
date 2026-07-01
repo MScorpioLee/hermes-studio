@@ -12,6 +12,7 @@ import { authenticateUserToken, isAuthEnabled, type AuthenticatedUser } from '..
 import { findUserByUsername, getUserAvatar } from '../../../db/hermes/users-store'
 import { config } from '../../../config'
 import { createSocketIoCorsOrigin, shouldRejectUpgradeOrigin } from '../../../security'
+import { getSocketIoPath } from '../../public-base-path'
 import { paginateRecentGroupMessagesCanonical, sliceGroupMessagesCanonical, sliceGroupMessagesForSnapshotTail, type GroupMessageCursorCutoff } from './group-message-ordering'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -739,8 +740,10 @@ export class GroupChatServer {
         this.storage = new ChatStorage()
         this.storage.init()
         const servers = Array.isArray(httpServers) ? httpServers : [httpServers]
+        const socketIoPath = getSocketIoPath()
 
         this.io = new Server(servers[0], {
+            path: socketIoPath,
             cors: { origin: createSocketIoCorsOrigin(config.corsOrigins) },
             allowRequest: (req, callback) => {
                 if (shouldRejectUpgradeOrigin(req, config.corsOrigins)) {
@@ -756,7 +759,7 @@ export class GroupChatServer {
                 skipMiddlewares: true,
             },
         })
-        servers.slice(1).forEach((httpServer) => this.io.attach(httpServer))
+        servers.slice(1).forEach((httpServer) => this.io.attach(httpServer, { path: socketIoPath }))
         this.nsp = this.io.of('/group-chat')
         this.nsp.use(this.authMiddleware.bind(this))
         this.nsp.on('connection', this.onConnection.bind(this))
@@ -766,7 +769,7 @@ export class GroupChatServer {
             this.rooms.set(row.id, new ChatRoom(row.id, row.name))
         })
 
-        logger.info('[GroupChat] Socket.IO ready at /group-chat')
+        logger.info('[GroupChat] Socket.IO ready at /group-chat via %s', socketIoPath)
 
         // Initialize context engine for group chat compression
         const contextEngine = new ContextEngine({

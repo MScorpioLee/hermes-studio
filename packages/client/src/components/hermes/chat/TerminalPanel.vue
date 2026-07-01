@@ -4,7 +4,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
-import { getApiKey, getBaseUrlValue } from "@/api/client";
+import { buildWebSocketUrl, getApiKey } from "@/api/client";
 import { NButton, NPopconfirm, NTooltip, NSelect, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import type { ITheme } from "@xterm/xterm";
@@ -130,33 +130,10 @@ const terminalBg = computed(
 
 // ─── WebSocket ──────────────────────────────────────────────────
 
-function formatHostForPort(hostname: string, port: number): string {
-  if (hostname.startsWith("[") && hostname.endsWith("]")) {
-    return `${hostname}:${port}`;
-  }
-  return hostname.includes(":") ? `[${hostname}]:${port}` : `${hostname}:${port}`;
-}
-
 function buildWsUrl(): string {
   const token = getApiKey();
-  const base = getBaseUrlValue();
-  const wsProtocol = base
-    ? base.startsWith("https")
-      ? "wss:"
-      : "ws:"
-    : location.protocol === "https:"
-      ? "wss:"
-      : "ws:";
-
-  if (base) {
-    return `${wsProtocol}//${new URL(base).host}/api/hermes/terminal${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-  }
-
-  const directDevPort = import.meta.env.VITE_HERMES_DIRECT_WS_PORT;
-  const host = import.meta.env.DEV && directDevPort
-    ? formatHostForPort(location.hostname, Number(directDevPort))
-    : location.host;
-  return `${wsProtocol}//${host}/api/hermes/terminal${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+  const path = `/api/hermes/terminal${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+  return buildWebSocketUrl(path, import.meta.env.VITE_HERMES_DIRECT_WS_PORT);
 }
 
 function connect() {

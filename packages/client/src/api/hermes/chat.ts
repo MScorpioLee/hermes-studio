@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { getBaseUrlValue, getApiKey } from '../client'
+import { getBaseUrlValue, getApiKey, getSocketIoPathValue } from '../client'
 import type { ProviderApiMode } from './system'
 
 export type ContentBlock =
@@ -647,6 +647,7 @@ export function connectChatRun(requestedProfile?: string | null, transport: Chat
 
   const namespace = transport === 'global-agent' ? '/global-agent' : '/chat-run'
   chatRunSocket = io(`${baseUrl}${namespace}`, {
+    path: getSocketIoPathValue(),
     auth: { token },
     query: { profile },
     transports: ['websocket', 'polling'],

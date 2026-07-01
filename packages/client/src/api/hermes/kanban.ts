@@ -1,4 +1,4 @@
-import { request, getApiKey, getBaseUrlValue } from '../client'
+import { request, getApiKey, buildWebSocketUrl } from '../client'
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -252,18 +252,7 @@ function boardParams(board?: string): URLSearchParams {
   return params
 }
 
-function websocketProtocol(base?: string): string {
-  if (base) return base.startsWith('https') ? 'wss:' : 'ws:'
-  return location.protocol === 'https:' ? 'wss:' : 'ws:'
-}
-
-function formatHostForPort(hostname: string, port: number): string {
-  if (hostname.startsWith('[') && hostname.endsWith(']')) return `${hostname}:${port}`
-  return hostname.includes(':') ? `[${hostname}]:${port}` : `${hostname}:${port}`
-}
-
 export function buildKanbanEventsWebSocketUrl(opts?: KanbanBoardOptions): string {
-  const base = getBaseUrlValue()
   const params = boardParams(opts?.board)
   const token = getApiKey()
   if (token) params.set('token', token)
@@ -271,15 +260,7 @@ export function buildKanbanEventsWebSocketUrl(opts?: KanbanBoardOptions): string
   if (profile) params.set('profile', profile)
   const path = `/api/hermes/kanban/events?${params.toString()}`
 
-  if (base) {
-    return `${websocketProtocol(base)}//${new URL(base).host}${path}`
-  }
-
-  const directDevPort = import.meta.env.VITE_HERMES_DIRECT_WS_PORT
-  const host = import.meta.env.DEV && directDevPort
-    ? formatHostForPort(location.hostname, Number(directDevPort))
-    : location.host
-  return `${websocketProtocol()}//${host}${path}`
+  return buildWebSocketUrl(path, import.meta.env.VITE_HERMES_DIRECT_WS_PORT)
 }
 
 export function openKanbanEventStream(opts?: KanbanBoardOptions): WebSocket {

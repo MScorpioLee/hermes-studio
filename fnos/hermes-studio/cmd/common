@@ -21,6 +21,7 @@ PYTHON_BIN="${PYTHON_HOME}/bin/python3"
 HERMES_BIN_VALUE="${PYTHON_HOME}/bin/hermes"
 SERVER_DIR="${APP_DIR}/server"
 SERVER_ENTRY="${SERVER_DIR}/dist/server/index.js"
+GATEWAY_SOCKET="${APP_DIR}/hermes-studio.sock"
 PORT_VALUE="$DEFAULT_PORT"
 BRIDGE_PORT_VALUE=""
 WORKER_PORT_BASE_VALUE=""
@@ -48,6 +49,10 @@ prepare_dirs() {
 
 clean_preview_runtime() {
     rm -rf "$PREVIEW_DIR" "$PREVIEW_HOME_DIR"
+}
+
+clean_gateway_socket() {
+    rm -f "$GATEWAY_SOCKET"
 }
 
 is_valid_port() {
@@ -311,6 +316,7 @@ stop_all_processes() {
         terminate_pids $pids
     fi
     mark_gateway_stopped
+    clean_gateway_socket
     rm -f "$PID_FILE"
 }
 

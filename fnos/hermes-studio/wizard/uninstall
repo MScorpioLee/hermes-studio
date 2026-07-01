@@ -1,30 +1,30 @@
 [
   {
-    "stepTitle": "Uninstall",
+    "stepTitle": "卸载确认",
     "items": [
       {
         "type": "tips",
-        "helpText": "Uninstalling stops Hermes Studio and removes the application package. Choose whether to keep Hermes profiles, credentials, uploads, logs, and Web UI state."
+        "helpText": "卸载会先停止 Hermes Studio 以及旧的 Web UI、Hermes Agent 和 Bridge 进程，然后移除应用包。你可以选择保留或删除 Hermes Profile、凭证、上传文件、日志和 Web UI 状态。"
       },
       {
         "type": "radio",
         "field": "wizard_keep_data",
-        "label": "Application data",
+        "label": "应用数据",
         "initValue": "keep",
         "options": [
           {
-            "label": "Keep data and configuration",
+            "label": "保留数据和配置",
             "value": "keep"
           },
           {
-            "label": "Delete data and configuration",
+            "label": "删除数据和配置",
             "value": "delete"
           }
         ],
         "rules": [
           {
             "required": true,
-            "message": "Please choose whether to keep application data."
+            "message": "请选择是否保留应用数据。"
           }
         ]
       }

@@ -18,6 +18,30 @@ The fnOS build disables the in-app Version Preview runtime because that feature
 creates a separate development checkout and installs native npm modules on the
 NAS at runtime.
 
+The fnOS package is self-contained. It does not declare external fnOS
+middleware services and does not require Docker, Redis, MinIO, or RabbitMQ.
+The bundled runtime metadata is written to
+`fnos/hermes-studio/config/runtime-metadata.json` and is patched during the
+build when a workflow supplies a different Hermes Agent version.
+
+## fnOS Integration
+
+The package requests `root` runtime privileges because Hermes Studio needs to
+launch and manage shell-backed workers, clean old service processes during
+upgrade/stop, and expose the embedded bridge reliably on fnOS. The package still
+declares the `hermes-studio` app user/group so fnOS can create the expected
+application account records.
+
+The desktop launcher uses fnOS unified gateway registration:
+
+- gateway prefix: `/app/hermes-studio`
+- gateway socket: `${TRIM_TARGET_DIR}/hermes-studio.sock`
+- minimum fnOS version: `1.1.3100`
+
+The Web UI also keeps the direct HTTP port path for manual access and port
+customization. The unified gateway path is the native fnOS desktop entry; the
+direct port remains the app setting exposed by the install/config wizard.
+
 ## Local Build
 
 Native packages must be built on Linux x64 so native npm modules match fnOS. On
@@ -49,9 +73,15 @@ On a successful build, GitHub publishes both files to a release named
 checks a stable URL to poll. A manually installed `.fpk` still needs an app
 store/feed integration to show in-product update prompts inside fnOS.
 
+The native fnOS package update should be handled by the fnOS application update
+channel. Hermes Web UI and Hermes Agent version management remains in the
+existing npm/runtime build flow; the fnOS package does not replace that with a
+separate in-app updater.
+
 ## fnOS Runtime Paths
 
-- Web UI entrypoint: `http://<fnos-host>:6060/`
+- Web UI direct entrypoint: `http://<fnos-host>:6060/`
+- fnOS unified gateway entrypoint: `/app/hermes-studio/`
 - Hermes Agent state: `${TRIM_PKGVAR}/hermes`
 - Web UI state: `${TRIM_PKGVAR}/hermes-web-ui`
 - Logs: `${TRIM_PKGVAR}/log/hermes-studio.log`

@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { getActiveProfileName, getApiKey, getBaseUrlValue } from '../client'
+import { getActiveProfileName, getApiKey, getBaseUrlValue, getSocketIoPathValue } from '../client'
 import type { WorkflowRecord } from './workflows'
 
 export type WorkflowRuntimeState = 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'canceled'
@@ -38,6 +38,7 @@ export function connectWorkflowSocket(profile?: string | null): Socket {
 
   socketProfile = nextProfile
   socket = io(`${getBaseUrlValue()}/workflow`, {
+    path: getSocketIoPathValue(),
     auth: { token: getApiKey() },
     query: { profile: nextProfile },
     transports: ['websocket', 'polling'],

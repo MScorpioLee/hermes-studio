@@ -1,6 +1,15 @@
 import router from '@/router'
 
-const DEFAULT_BASE_URL = ''
+function normalizePublicBaseUrl(value: string): string {
+  let baseUrl = String(value || '').trim()
+  if (!baseUrl || baseUrl === '/') return ''
+  if (!baseUrl.startsWith('/') && !/^https?:\/\//i.test(baseUrl)) {
+    baseUrl = `/${baseUrl}`
+  }
+  return baseUrl.replace(/\/+$/, '')
+}
+
+const DEFAULT_BASE_URL = normalizePublicBaseUrl(import.meta.env.BASE_URL)
 const ACTIVE_PROFILE_STORAGE_KEY = 'hermes_active_profile_name'
 
 function isDesktopShell(): boolean {
@@ -215,4 +224,42 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
 
 export function getBaseUrlValue(): string {
   return getBaseUrl()
+}
+
+function currentOrigin(): string {
+  return typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+}
+
+function baseUrlPathname(baseUrl: string): string {
+  if (!baseUrl) return ''
+  try {
+    return new URL(baseUrl, currentOrigin()).pathname.replace(/\/+$/, '')
+  } catch {
+    return baseUrl.startsWith('/') ? baseUrl.replace(/\/+$/, '') : ''
+  }
+}
+
+function formatHostForPort(hostname: string, port: number): string {
+  if (hostname.startsWith('[') && hostname.endsWith(']')) return `${hostname}:${port}`
+  return hostname.includes(':') ? `[${hostname}]:${port}` : `${hostname}:${port}`
+}
+
+export function getSocketIoPathValue(): string {
+  return `${baseUrlPathname(getBaseUrl())}/socket.io`
+}
+
+export function buildWebSocketUrl(path: string, directDevPort?: string | number): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const base = getBaseUrl()
+  if (base) {
+    const baseUrl = new URL(base, currentOrigin())
+    const wsProtocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${wsProtocol}//${baseUrl.host}${baseUrl.pathname.replace(/\/+$/, '')}${normalizedPath}`
+  }
+
+  const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = import.meta.env.DEV && directDevPort
+    ? formatHostForPort(location.hostname, Number(directDevPort))
+    : location.host
+  return `${wsProtocol}//${host}${normalizedPath}`
 }

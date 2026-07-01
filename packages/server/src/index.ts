@@ -6,7 +6,7 @@ import serve from 'koa-static'
 import send from 'koa-send'
 import os from 'os'
 import { resolve } from 'path'
-import { mkdir } from 'fs/promises'
+import { chmod, mkdir, unlink } from 'fs/promises'
 import { readFileSync } from 'fs'
 import { config, shouldCreateWebUiDataDir } from './config'
 import { initLoginLimiter } from './services/login-limiter'
@@ -34,6 +34,7 @@ import { createStaticCompressionMiddleware } from './middleware/static-compressi
 import { requireUserJwt, resolveUserProfile } from './middleware/user-auth'
 import { createCorsOriginResolver, securityHeaders } from './security'
 import type { ShutdownHandler } from './services/shutdown'
+import { getPublicBasePath, getSocketIoPath, stripPublicBasePathFromUrl } from './services/public-base-path'
 
 // Injected by esbuild at build time; fallback to reading package.json in dev mode
 declare const __APP_VERSION__: string
@@ -68,7 +69,7 @@ interface ListenResult {
   servers: any[]
 }
 
-function listen(app: Koa, port: number, host: string): Promise<any> {
+function listenTcp(app: Koa, port: number, host: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const s = app.listen(port, host)
     s.once('listening', () => resolve(s))
@@ -76,11 +77,43 @@ function listen(app: Koa, port: number, host: string): Promise<any> {
   })
 }
 
+async function removeStaleUnixSocket(socketPath: string): Promise<void> {
+  try {
+    await unlink(socketPath)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+  }
+}
+
+function listenUnixSocket(app: Koa, socketPath: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const s = app.listen(socketPath)
+    s.once('listening', () => {
+      void chmod(socketPath, 0o666).catch(err => logger.warn(err, '[bootstrap] failed to chmod Unix socket'))
+      resolve(s)
+    })
+    s.once('error', reject)
+  })
+}
+
+function getUnixSocketPath(): string {
+  return (process.env.HERMES_WEB_UI_UNIX_SOCKET || process.env.HERMES_WEB_UI_LISTEN_SOCKET || '').trim()
+}
+
 async function listenWithFallback(app: Koa, port: number, host?: string): Promise<ListenResult> {
   const bindHost = host || '0.0.0.0'
   console.log(`[bootstrap] listening on ${bindHost}:${port}`)
-  const primary = await listen(app, port, bindHost)
-  return { primary, servers: [primary] }
+  const primary = await listenTcp(app, port, bindHost)
+  const nextServers = [primary]
+  const socketPath = getUnixSocketPath()
+
+  if (socketPath && process.platform !== 'win32') {
+    console.log(`[bootstrap] listening on Unix socket ${socketPath}`)
+    await removeStaleUnixSocket(socketPath)
+    nextServers.push(await listenUnixSocket(app, socketPath))
+  }
+
+  return { primary, servers: nextServers }
 }
 
 function getLoopbackBaseUrl(httpServer: any): string {
@@ -167,6 +200,51 @@ function registerDesktopShutdownRoute(app: Koa): void {
 function envFlagEnabled(name: string): boolean {
   const value = String(process.env[name] || '').trim().toLowerCase()
   return ['1', 'true', 'yes', 'on'].includes(value)
+}
+
+function registerPublicBasePathMiddleware(app: Koa): void {
+  const publicBasePath = getPublicBasePath()
+  if (!publicBasePath) return
+
+  app.use(async (ctx, next) => {
+    const originalUrl = ctx.url
+    const strippedUrl = stripPublicBasePathFromUrl(originalUrl, publicBasePath)
+    if (strippedUrl !== originalUrl) {
+      ctx.url = strippedUrl
+    }
+
+    try {
+      await next()
+    } finally {
+      ctx.url = originalUrl
+    }
+  })
+}
+
+function isSocketIoUrl(rawUrl: string): boolean {
+  const socketIoPath = getSocketIoPath()
+  try {
+    const url = new URL(rawUrl || '/', 'http://hermes.local')
+    return url.pathname === socketIoPath || url.pathname.startsWith(`${socketIoPath}/`)
+  } catch {
+    return rawUrl === socketIoPath || rawUrl.startsWith(`${socketIoPath}/`)
+  }
+}
+
+function installPublicBasePathUpgradeStripper(httpServers: any[]): void {
+  const publicBasePath = getPublicBasePath()
+  if (!publicBasePath) return
+
+  httpServers.forEach((httpServer) => {
+    httpServer.prependListener('upgrade', (req: any) => {
+      const originalUrl = String(req.url || '')
+      if (!originalUrl || isSocketIoUrl(originalUrl)) return
+      const strippedUrl = stripPublicBasePathFromUrl(originalUrl, publicBasePath)
+      if (strippedUrl !== originalUrl) {
+        req.url = strippedUrl
+      }
+    })
+  })
 }
 
 function gatewayAutostartDisabled(): boolean {
@@ -287,6 +365,7 @@ export async function bootstrap() {
   }
 
   const app = new Koa()
+  registerPublicBasePathMiddleware(app)
   // Initialize all web-ui SQLite tables
   const { initAllStores } = await import('./db/hermes/init')
   initAllStores()
@@ -331,6 +410,7 @@ export async function bootstrap() {
   servers = listenResult.servers
   console.log('[bootstrap] app.listen called')
 
+  installPublicBasePathUpgradeStripper(servers)
   setupTerminalWebSocket(servers)
   setupKanbanEventsWebSocket(servers)
   getLanPeerSocketManager().setupServer(servers)
@@ -369,7 +449,7 @@ export async function bootstrap() {
       if (url.pathname !== '/api/hermes/terminal' &&
         url.pathname !== '/api/hermes/kanban/events' &&
         url.pathname !== getLanPeerSocketPath() &&
-        !url.pathname.startsWith('/socket.io/')) {
+        !isSocketIoUrl(req.url || '')) {
         socket.destroy()
       }
     })

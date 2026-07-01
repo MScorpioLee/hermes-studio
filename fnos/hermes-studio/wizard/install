@@ -1,24 +1,24 @@
 [
   {
-    "stepTitle": "Install",
+    "stepTitle": "安装设置",
     "items": [
       {
         "type": "tips",
-        "helpText": "Hermes Studio runs as a native fnOS service with bundled Node.js and Hermes Agent runtimes. It stores Hermes Agent data, uploads, logs, and Web UI state in the application data directory. The default Web UI login is admin / 123456; change it after first login."
+        "helpText": "Hermes Studio 将以原生 fnOS 服务运行，内置 Node.js 24.15.0、Python 3.12 和 Hermes Agent 0.17.0，无需额外安装 Docker、Redis、MinIO、RabbitMQ 等中间件。应用会保存 Hermes Profile、凭证、上传文件、日志和 Web UI 状态到应用数据目录。默认登录账号为 admin / 123456，首次登录后请及时修改密码。"
       },
       {
         "type": "text",
         "field": "wizard_service_port",
-        "label": "Web UI port",
+        "label": "Web UI 端口",
         "initValue": "6060",
         "rules": [
           {
             "required": true,
-            "message": "Please enter the Web UI port."
+            "message": "请输入 Web UI 端口。"
           },
           {
             "pattern": "^[0-9]+$",
-            "message": "The port must be numeric."
+            "message": "端口只能填写数字。"
           }
         ]
       }
