@@ -44,3 +44,53 @@ export function stripPublicBasePathFromUrl(rawUrl: string, basePath = getPublicB
     return rawUrl
   }
 }
+
+export function aliasRootSocketIoUrl(rawUrl: string, basePath = getPublicBasePath()): string {
+  const normalizedBasePath = normalizePublicBasePath(basePath)
+  if (!normalizedBasePath || !rawUrl) return rawUrl
+
+  const rootSocketIoPath = '/socket.io'
+  try {
+    const url = new URL(rawUrl, 'http://hermes.local')
+    if (url.pathname !== rootSocketIoPath && !url.pathname.startsWith(`${rootSocketIoPath}/`)) {
+      return rawUrl
+    }
+
+    const nextPath = `${normalizedBasePath}${url.pathname}`
+    if (/^https?:\/\//i.test(rawUrl)) {
+      url.pathname = nextPath
+      return url.toString()
+    }
+    return `${nextPath}${url.search}`
+  } catch {
+    if (rawUrl === rootSocketIoPath) return `${normalizedBasePath}${rootSocketIoPath}`
+    if (rawUrl.startsWith(`${rootSocketIoPath}/`)) return `${normalizedBasePath}${rawUrl}`
+    return rawUrl
+  }
+}
+
+type RootSocketIoAliasRequest = {
+  url?: string
+}
+
+type RootSocketIoAliasServer = {
+  prependListener: (event: 'request' | 'upgrade', listener: (req: RootSocketIoAliasRequest) => void) => unknown
+}
+
+export function installRootSocketIoAlias(httpServers: RootSocketIoAliasServer[], basePath = getPublicBasePath()): void {
+  const normalizedBasePath = normalizePublicBasePath(basePath)
+  if (!normalizedBasePath) return
+
+  const rewriteUrl = (req: RootSocketIoAliasRequest) => {
+    const originalUrl = String(req.url || '')
+    const nextUrl = aliasRootSocketIoUrl(originalUrl, normalizedBasePath)
+    if (nextUrl !== originalUrl) {
+      req.url = nextUrl
+    }
+  }
+
+  httpServers.forEach((httpServer) => {
+    httpServer.prependListener('request', rewriteUrl)
+    httpServer.prependListener('upgrade', rewriteUrl)
+  })
+}

@@ -34,7 +34,7 @@ import { createStaticCompressionMiddleware } from './middleware/static-compressi
 import { requireUserJwt, resolveUserProfile } from './middleware/user-auth'
 import { createCorsOriginResolver, securityHeaders } from './security'
 import type { ShutdownHandler } from './services/shutdown'
-import { getPublicBasePath, getSocketIoPath, stripPublicBasePathFromUrl } from './services/public-base-path'
+import { getPublicBasePath, getSocketIoPath, installRootSocketIoAlias, stripPublicBasePathFromUrl } from './services/public-base-path'
 
 // Injected by esbuild at build time; fallback to reading package.json in dev mode
 declare const __APP_VERSION__: string
@@ -418,6 +418,7 @@ export async function bootstrap() {
 
   // Group chat Socket.IO (must be after server is created)
   const groupChatServer = new GroupChatServer(servers)
+  installRootSocketIoAlias(servers)
   setGroupChatServer(groupChatServer)
 
   // Chat run Socket.IO — shares the same Server instance, just adds /chat-run namespace

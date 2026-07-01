@@ -1,5 +1,5 @@
 appname               = hermes-studio
-version               = 0.6.25
+version               = 0.6.26
 display_name          = Hermes Studio
 desc                  = Hermes Studio 原生 fnOS 应用，内置 Node.js、Python 和 Hermes Agent 运行环境。
 platform              = x86
