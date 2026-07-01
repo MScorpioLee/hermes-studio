@@ -167,8 +167,7 @@ function responseErrorMessage(text: string, statusText: string): string {
 
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   await ensureDesktopAuthReady()
-  const base = getBaseUrl()
-  const url = `${base}${path}`
+  const url = buildApiUrl(path)
   const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData
   const headers: Record<string, string> = {
     ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
@@ -220,6 +219,11 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   }
 
   return res.json()
+}
+
+export function buildApiUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${getBaseUrl()}${normalizedPath}`
 }
 
 export function getBaseUrlValue(): string {
