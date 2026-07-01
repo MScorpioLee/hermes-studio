@@ -25,7 +25,10 @@ export_runtime_env() {
     export HERMES_AGENT_BRIDGE_WORKER_PORT_BASE="$WORKER_PORT_BASE_VALUE"
     export HERMES_WEB_UI_MANAGED_GATEWAY=1
     export HERMES_WEB_UI_ENABLE_LOCAL_SHUTDOWN=1
-    export HERMES_WEB_UI_STOP_GATEWAYS_ON_SHUTDOWN=1
+    # fnOS lifecycle scripts stop app-owned node/python processes explicitly.
+    # Keep managed gateways alive across Web UI-only restarts so a parent SIGTERM
+    # does not look like a gateway crash/restart cycle.
+    export HERMES_WEB_UI_STOP_GATEWAYS_ON_SHUTDOWN=0
     export HERMES_WEB_UI_DISABLE_VERSION_PREVIEW=1
     export HERMES_ALLOW_ROOT_GATEWAY=1
     export TIRITH_ENABLED=false
