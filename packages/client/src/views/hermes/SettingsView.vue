@@ -20,6 +20,7 @@ import ModelSettings from "@/components/hermes/settings/ModelSettings.vue";
 import AccountSettings from "@/components/hermes/settings/AccountSettings.vue";
 import UserManagementSettings from "@/components/hermes/settings/UserManagementSettings.vue";
 import VoiceSettings from "@/components/hermes/settings/VoiceSettings.vue";
+import NativeUpdateSettings from "@/components/hermes/settings/NativeUpdateSettings.vue";
 import { isStoredSuperAdmin } from "@/api/client";
 import { useProfilesStore } from "@/stores/hermes/profiles";
 
@@ -43,6 +44,7 @@ const validTabs = computed(() => new Set([
   "privacy",
   "models",
   "voice",
+  ...(canManageUsers ? ["updates"] : []),
 ]));
 
 function normalizeTab(value: unknown): string {
@@ -122,6 +124,9 @@ onMounted(() => {
           </NTabPane>
           <NTabPane name="voice" :tab="t('settings.tabs.voice')">
             <VoiceSettings />
+          </NTabPane>
+          <NTabPane v-if="canManageUsers" name="updates" :tab="t('settings.tabs.updates')">
+            <NativeUpdateSettings />
           </NTabPane>
         </NTabs>
       </NSpin>

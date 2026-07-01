@@ -69,9 +69,11 @@ The package workflow writes two files:
 - `dist/fnos/hermes-studio.latest.json`
 
 On a successful build, GitHub publishes both files to a release named
-`fnos-v<package.json version>`. This gives fnOS app stores or custom update
-checks a stable URL to poll. A manually installed `.fpk` still needs an app
-store/feed integration to show in-product update prompts inside fnOS.
+`fnos-v<package.json version>`. Hermes Studio checks the published
+`hermes-studio.latest.json` from the Web UI settings update page and reports
+whether the native fnOS package is newer than the installed package version.
+fnOS App Center update badges still depend on the normal fnOS application
+update channel or store/feed integration.
 
 The native fnOS package update should be handled by the fnOS application update
 channel. Hermes Web UI and Hermes Agent version management remains in the

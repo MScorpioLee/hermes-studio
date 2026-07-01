@@ -62,6 +62,25 @@ export interface PreviewActionResponse extends PreviewStatus {
   code?: string
 }
 
+export interface FnosUpdateStatus {
+  status: 'ok' | 'unavailable'
+  source: 'fnos-native'
+  currentVersion: string
+  latestVersion: string
+  updateAvailable: boolean
+  metadataUrl: string
+  checkedAt: string
+  downloadUrl: string
+  releaseUrl: string
+  releaseTag: string
+  servicePort: number | null
+  gatewayPrefix: string
+  updatedAt: string
+  builtFrom: string
+  bundledRuntime: unknown | null
+  error?: string
+}
+
 // Config-based model types
 export interface ModelInfo {
   id: string
@@ -171,6 +190,10 @@ export async function startPreview(tag?: string): Promise<PreviewActionResponse>
 
 export async function stopPreview(): Promise<PreviewActionResponse> {
   return request<PreviewActionResponse>('/api/hermes/update/preview/stop', { method: 'POST' })
+}
+
+export async function fetchFnosUpdateStatus(): Promise<FnosUpdateStatus> {
+  return request<FnosUpdateStatus>('/api/hermes/fnos/update')
 }
 
 export async function fetchConfigModels(): Promise<ConfigModelsResponse> {

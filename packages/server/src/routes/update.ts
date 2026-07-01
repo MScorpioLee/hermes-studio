@@ -1,10 +1,12 @@
 import Router from '@koa/router'
 import * as ctrl from '../controllers/update'
+import * as fnosCtrl from '../controllers/fnos-update'
 import { requireSuperAdmin } from '../middleware/user-auth'
 
 export const updateRoutes = new Router()
 
 updateRoutes.post('/api/hermes/update', ctrl.handleUpdate)
+updateRoutes.get('/api/hermes/fnos/update', requireSuperAdmin, fnosCtrl.fnosUpdateStatus)
 updateRoutes.get('/api/hermes/update/preview', requireSuperAdmin, ctrl.previewStatus)
 updateRoutes.get('/api/hermes/update/preview/tags', requireSuperAdmin, ctrl.previewTags)
 updateRoutes.post('/api/hermes/update/preview/prepare', requireSuperAdmin, ctrl.preparePreview)
