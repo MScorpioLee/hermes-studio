@@ -235,6 +235,56 @@ export function listInstalledWebUiVersions(active = readActiveVersionManifest())
   return installed.sort((left, right) => right.version.localeCompare(left.version, undefined, { numeric: true }))
 }
 
+function currentRuntimeVersion(): string {
+  return (process.env.HERMES_AGENT_RUNTIME_VERSION || process.env.HERMES_VERSION || '').trim().replace(/^v/, '')
+}
+
+function inferCurrentRuntimeDirectory(): string {
+  const explicit = process.env.HERMES_AGENT_RUNTIME_DIR?.trim()
+  if (explicit) return resolve(explicit)
+
+  const agentRoot = process.env.HERMES_AGENT_ROOT?.trim()
+  if (agentRoot && basename(resolve(agentRoot)) === 'python') {
+    return dirname(resolve(agentRoot))
+  }
+
+  const nodeRoot = process.env.HERMES_AGENT_NODE_ROOT?.trim()
+  if (nodeRoot && basename(resolve(nodeRoot)) === 'node') {
+    return dirname(resolve(nodeRoot))
+  }
+
+  return ''
+}
+
+function currentRuntimeReady(root: string): boolean {
+  if (!root) return false
+  const pythonBin = process.platform === 'win32'
+    ? join(root, 'python', 'python.exe')
+    : join(root, 'python', 'bin', 'python3')
+  const hermesBin = process.platform === 'win32'
+    ? join(root, 'python', 'Scripts', 'hermes.exe')
+    : join(root, 'python', 'bin', 'hermes')
+  const nodeBin = process.platform === 'win32'
+    ? join(root, 'node', 'node.exe')
+    : join(root, 'node', 'bin', 'node')
+  return [pythonBin, hermesBin, nodeBin].every(existsSync)
+}
+
+function currentRuntimeVersionRecord(active: ActiveVersionManifest | null): InstalledRuntimeVersion | null {
+  if (active?.runtimeDirectory) return null
+  const version = currentRuntimeVersion()
+  const directory = inferCurrentRuntimeDirectory()
+  if (!version || !currentRuntimeReady(directory)) return null
+
+  return {
+    version,
+    platform: runtimePlatformKey(),
+    directory,
+    active: true,
+    manifestHermesRuntimeVersion: version,
+  }
+}
+
 async function fetchRemoteVersions(): Promise<{ manifest: RemoteVersionManifest | null; error: string }> {
   const url = process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || DEFAULT_REMOTE_MANIFEST_URL
   try {
@@ -250,6 +300,11 @@ export async function getRuntimeVersionStatus(): Promise<RuntimeVersionStatus> {
   const active = readActiveVersionManifest()
   const { manifest, error } = await fetchRemoteVersions()
   const webUiVersion = getHermesWebUiVersion()
+  const currentRuntime = currentRuntimeVersionRecord(active)
+  const installedRuntimes = listInstalledRuntimeVersions(active)
+  if (currentRuntime && !installedRuntimes.some(item => resolve(item.directory) === resolve(currentRuntime.directory))) {
+    installedRuntimes.unshift(currentRuntime)
+  }
 
   return {
     active,
@@ -258,9 +313,9 @@ export async function getRuntimeVersionStatus(): Promise<RuntimeVersionStatus> {
     remoteManifestUrl: process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || DEFAULT_REMOTE_MANIFEST_URL,
     remoteError: error,
     hermes: {
-      activeVersion: active?.hermesRuntimeVersion || '',
-      activeDirectory: active?.runtimeDirectory || '',
-      installed: listInstalledRuntimeVersions(active),
+      activeVersion: active?.hermesRuntimeVersion || currentRuntime?.manifestHermesRuntimeVersion || '',
+      activeDirectory: active?.runtimeDirectory || currentRuntime?.directory || '',
+      installed: installedRuntimes,
       remoteVersions: normalizeStringList(manifest?.hermes),
     },
     webui: {

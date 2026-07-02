@@ -77,6 +77,12 @@ function patchNativeVersionEnv(text, version) {
   return text.replace(pattern, `$1"${version}"`)
 }
 
+function patchBundledHermesVersion(text, version) {
+  const pattern = /^(RUNTIME_VERSION_VALUE=).*/m
+  if (!pattern.test(text)) return text
+  return text.replace(pattern, `$1"${version}"`)
+}
+
 async function writePatchedManifest() {
   const manifestPath = path.join(stageDir, 'manifest')
   let manifest = await readFile(manifestPath, 'utf8')
@@ -100,6 +106,10 @@ async function writeRuntimeMetadata() {
     hermesAgent: bundledHermesVersion,
   }
   await writeFile(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`)
+
+  const commonScriptPath = path.join(stageDir, 'cmd', 'common')
+  const commonScript = await readFile(commonScriptPath, 'utf8')
+  await writeFile(commonScriptPath, patchBundledHermesVersion(commonScript, bundledHermesVersion))
 }
 
 async function syncIcons() {

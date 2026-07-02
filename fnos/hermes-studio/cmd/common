@@ -20,6 +20,8 @@ BUNDLED_NODE_ROOT="${APP_DIR}/runtime/node"
 BUNDLED_NODE_BIN="${BUNDLED_NODE_ROOT}/bin/node"
 BUNDLED_PYTHON_HOME="${APP_DIR}/runtime/python"
 BUNDLED_SERVER_DIR="${APP_DIR}/server"
+RUNTIME_ROOT="${APP_DIR}/runtime"
+RUNTIME_VERSION_VALUE="0.17.0"
 NODE_ROOT="$BUNDLED_NODE_ROOT"
 NODE_BIN="$BUNDLED_NODE_BIN"
 PYTHON_HOME="$BUNDLED_PYTHON_HOME"
@@ -128,6 +130,7 @@ apply_active_version_overrides() {
 
     runtime_dir="$(read_active_version_field runtimeDirectory "${VAR_DIR}/hermes-web-ui/desktop-runtime/hermes" 2>/dev/null || true)"
     if runtime_dir_ready "$runtime_dir"; then
+        RUNTIME_ROOT="$runtime_dir"
         NODE_ROOT="${runtime_dir}/node"
         NODE_BIN="${NODE_ROOT}/bin/node"
         PYTHON_HOME="${runtime_dir}/python"
