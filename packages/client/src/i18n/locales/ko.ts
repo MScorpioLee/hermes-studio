@@ -548,6 +548,10 @@ export default {
     tool: '도구',
     arguments: '인수',
     result: '결과',
+    workspaceChanges: '작업공간 변경',
+    changedFiles: '{files}개 파일 변경됨',
+    diffUnavailable: 'diff를 표시할 수 없습니다',
+    binaryFileDiffUnavailable: '바이너리 파일 diff를 표시할 수 없습니다',
     truncated: '... (잘림)',
     unchangedLines: '변경 없음 {count}줄',
     executionDuration: '실행 시간',    thinkingLabel: '사고 과정',
@@ -798,8 +802,11 @@ export default {
   plugins: {
     title: '플러그인',
     refresh: '새로고침',
-    notice: '탐색 가능한 Hermes 플러그인 manifest의 읽기 전용 인벤토리입니다. 탐색 메타데이터는 플러그인 코드를 로드하지 않고 읽습니다. v1의 관리 작업은 CLI에 유지되며, 변경 사항은 새 Hermes 세션에서 적용됩니다.',
+    notice: '탐색 가능한 Hermes 플러그인 manifest 인벤토리입니다. 탐색 메타데이터는 플러그인 코드를 로드하지 않고 읽습니다. standalone 사용자 플러그인은 여기에서 활성화하거나 비활성화할 수 있으며, 변경 사항은 새 Hermes 세션에서 적용됩니다.',
     loadFailed: '플러그인을 불러오지 못했습니다',
+    updateFailed: '플러그인을 업데이트하지 못했습니다',
+    enableSuccess: '{name} 활성화됨',
+    disableSuccess: '{name} 비활성화됨',
     commandCopied: '명령을 복사했습니다',
     searchPlaceholder: 'key, 이름, 설명, 경로 검색...',
     source: '소스',
@@ -847,7 +854,7 @@ export default {
       kind: '종류',
       capabilities: '기능',
       path: '경로 / entrypoint',
-      cli: 'CLI',
+      manage: '관리',
     },
     capabilities: {
       tools: '{count} tools',
@@ -1934,6 +1941,12 @@ export default {
 
   // 변경 이력
   changelog: {
+    new_0_6_23_1: '이번 릴리스는 0.6.22 이후 병합된 PR을 반영하며, 데스크톱 업데이트, MCP 정리, Petdex 펫, MCU 음성, 여러 설정 흐름을 개선했습니다',
+    new_0_6_23_2: '데스크톱 자체 업데이트는 다시 블로킹 방식으로 동작하고, Windows 업데이트 전 서비스 종료가 더 안정적이며, 종료 시 gateway, profile MCP 및 관련 하위 프로세스를 더 완전하게 정리합니다',
+    new_0_6_23_3: '데스크톱 MCP 주입과 Coding Agent MCP 실행 경로가 더 안정적이며, Windows workspace에 드라이브 선택기가 추가되었고 심볼릭 링크 폴더 표시와 데스크톱 Petdex 미리보기가 수정되었습니다',
+    new_0_6_23_4: 'Petdex 펫은 Web 펫, 독립 데스크톱 펫 창, 입양 후 즉시 표시, 오른쪽 위 닫기 버튼, 더 잘 보이는 데스크톱 초기 크기를 지원합니다',
+    new_0_6_23_5: 'MCU 및 전역 음성 처리는 오디오 프롬프트, OTA 보호, 분할 스트리밍 TTS, 음성 전 링크/코드 블록/표 정리, 완료되지 않은 TTS 생성 중단 처리를 지원합니다',
+    new_0_6_23_6: 'profile 설정 편집, 채팅 입력 높이 설정, 로그인 JWT 만료 시간 설정, Skill 편집, History의 로컬 보관 상태 유지, 새 채팅 드로어 문구, 내장 Provider 위험 작업 문구를 개선했습니다',
     new_0_6_22_1: '이번 릴리스는 0.6.21 이후 병합된 PR을 반영하며, 조합 모델, 세션 기록, 프록시 설정, 슬래시 명령, 모바일 레이아웃을 개선했습니다',
     new_0_6_22_2: '모델 페이지에 조합 모델 패널이 추가되었고, 채팅에서는 이전의 합성 플레이스홀더 도구 없이 실제 MoA reference와 aggregator 진행 상황을 표시할 수 있습니다',
     new_0_6_22_3: '채팅 세션을 세션 목록에서 보관하고 기록에서 복원할 수 있으며, 로컬 전용 Claude Code 및 Codex 세션도 기록에 올바르게 표시됩니다',

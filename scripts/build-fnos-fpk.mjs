@@ -65,11 +65,29 @@ function replaceLine(text, key, value) {
   return text.replace(pattern, `$1${value}`)
 }
 
+function readManifestValue(text, key) {
+  const pattern = new RegExp(`^${key}\\s*=\\s*(.*)$`, 'm')
+  const match = text.match(pattern)
+  return match ? match[1].trim() : ''
+}
+
+function patchNativeVersionEnv(text, version) {
+  const pattern = /^(\s*export HERMES_FNOS_NATIVE_VERSION=).*/m
+  if (!pattern.test(text)) return text
+  return text.replace(pattern, `$1"${version}"`)
+}
+
 async function writePatchedManifest() {
   const manifestPath = path.join(stageDir, 'manifest')
   let manifest = await readFile(manifestPath, 'utf8')
-  manifest = replaceLine(manifest, 'version', packageJson.version)
+  const nativeVersion = process.env.FNOS_NATIVE_VERSION?.trim() || readManifestValue(manifest, 'version')
+  if (!nativeVersion) throw new Error('Missing native fnOS version')
+  manifest = replaceLine(manifest, 'version', nativeVersion)
   await writeFile(manifestPath, manifest)
+
+  const mainScriptPath = path.join(stageDir, 'cmd', 'main')
+  const mainScript = await readFile(mainScriptPath, 'utf8')
+  await writeFile(mainScriptPath, patchNativeVersionEnv(mainScript, nativeVersion))
 }
 
 async function writeRuntimeMetadata() {

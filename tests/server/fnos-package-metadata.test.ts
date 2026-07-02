@@ -48,11 +48,14 @@ describe('fnOS package metadata', () => {
     expect(runtime.dependencies.middleware).toEqual([])
   })
 
-  it('keeps the manifest template aligned with the package and fnOS gateway requirements', () => {
+  it('keeps the native manifest version separate from the Web UI package version', () => {
     const manifest = parseManifest(readFnOsFile('manifest'))
     const pkg = readRootJson<{ version: string }>('package.json')
 
-    expect(manifest.version).toBe(pkg.version)
+    expect(pkg.version).toBe('0.6.23')
+    expect(manifest.version).toBe('0.6.30')
+    expect(manifest.version).not.toBe(pkg.version)
+    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.30"')
     expect(manifest.platform).toBe('x86')
     expect(manifest.os_min_version).toBe('1.1.3100')
     expect(manifest.install_dep_apps).toBe('')

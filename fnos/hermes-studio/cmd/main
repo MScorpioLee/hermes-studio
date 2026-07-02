@@ -27,6 +27,7 @@ export_runtime_env() {
     export HERMES_WEB_UI_ENABLE_LOCAL_SHUTDOWN=1
     export HERMES_WEB_UI_PUBLIC_BASE_PATH="/app/hermes-studio"
     export HERMES_WEB_UI_UNIX_SOCKET="${APP_DIR}/hermes-studio.sock"
+    export HERMES_FNOS_NATIVE_VERSION="0.6.30"
     # fnOS lifecycle scripts stop app-owned node/python processes explicitly.
     # Keep managed gateways alive across Web UI-only restarts so a parent SIGTERM
     # does not look like a gateway crash/restart cycle.

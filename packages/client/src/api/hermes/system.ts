@@ -6,6 +6,9 @@ export interface HealthResponse {
   version?: string
   gateway?: string
   webui_version?: string
+  native_shell_version?: string
+  fnos_native_version?: string
+  hermes_agent_runtime_version?: string
   webui_latest?: string
   webui_update_available?: boolean
   node_version?: string
@@ -78,6 +81,11 @@ export interface FnosUpdateStatus {
   updatedAt: string
   builtFrom: string
   bundledRuntime: unknown | null
+  nativeShellVersion?: string
+  webuiVersion?: string
+  sourceRepo?: string
+  packagingRepo?: string
+  layers?: unknown | null
   error?: string
 }
 

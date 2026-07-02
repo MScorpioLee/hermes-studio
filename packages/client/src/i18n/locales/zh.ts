@@ -601,6 +601,10 @@ export default {
     tool: '工具',
     arguments: '参数',
     result: '结果',
+    workspaceChanges: '工作区变更',
+    changedFiles: '{files} 个文件已更改',
+    diffUnavailable: '无法显示 diff',
+    binaryFileDiffUnavailable: '二进制文件无法显示 diff',
     truncated: '... (已截断)',
     unchangedLines: '{count} 行未修改',
     executionDuration: '执行时长',
@@ -1054,8 +1058,11 @@ export default {
   plugins: {
     title: '插件',
     refresh: '刷新',
-    notice: '只读展示可发现的 Hermes 插件 manifest。发现元数据读取不会加载插件代码。v1 管理动作仍保留在 CLI，新 Hermes 会话生效。',
+    notice: '展示可发现的 Hermes 插件 manifest。发现元数据读取不会加载插件代码。可在此启用或禁用 standalone 用户插件，新 Hermes 会话生效。',
     loadFailed: '加载插件失败',
+    updateFailed: '更新插件失败',
+    enableSuccess: '已启用 {name}',
+    disableSuccess: '已禁用 {name}',
     commandCopied: '命令已复制',
     searchPlaceholder: '搜索 key、名称、描述、路径...',
     source: '来源',
@@ -1103,7 +1110,7 @@ export default {
       kind: '类型',
       capabilities: '能力',
       path: '路径 / 入口',
-      cli: 'CLI',
+      manage: '管理',
     },
     capabilities: {
       tools: '{count} 个工具',
@@ -2350,6 +2357,12 @@ export default {
 
   // 更新日志
   changelog: {
+    new_0_6_23_1: '本次版本整理 0.6.22 之后合并的 PR，重点更新桌面端升级流程、MCP 进程清理、Petdex 宠物、MCU 语音体验和多处设置入口',
+    new_0_6_23_2: '桌面端自更新恢复为阻塞式流程，并加强 Windows 更新前的服务关闭；退出桌面端时会更完整地停止 gateway、profile MCP 和相关子进程',
+    new_0_6_23_3: '桌面端 MCP 注入和 Coding Agent MCP 启动路径更稳定，Windows workspace 支持磁盘选择器，并修复符号链接目录展示与桌面 Petdex 预览问题',
+    new_0_6_23_4: '新增 Petdex 宠物体验：支持 Web 宠物、桌面独立宠物窗口、领养后即时显示、右上角关闭按钮和更合适的桌面初始尺寸',
+    new_0_6_23_5: 'MCU 与全局语音体验升级：增加音频提示与 OTA 防护，支持分段流式 TTS，自动清理链接、代码块和表格等不适合朗读的内容，并能在中断时停止未完成的语音生成',
+    new_0_6_23_6: '设置与工作流细节继续完善：新增 profile 配置编辑、聊天输入框高度设置、登录 JWT 有效期配置、Skill 编辑、History 本地归档状态保留，并优化新聊天抽屉和内置 Provider 危险操作文案',
     new_0_6_22_1: '本次版本整理 0.6.21 之后合并的 PR，重点更新组合模型、会话历史、代理设置、斜杠命令和移动端布局细节',
     new_0_6_22_2: '模型页面新增组合模型面板，聊天中可以展示真实的 MoA reference 与 aggregator 进度，不再依赖旧的前端占位工具',
     new_0_6_22_3: '聊天会话支持从会话列表归档，并可在历史记录中恢复；本地-only 的 Claude Code 和 Codex 会话也会正确出现在历史记录中',

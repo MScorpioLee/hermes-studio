@@ -601,6 +601,10 @@ export default {
     tool: 'Tool',
     arguments: 'Arguments',
     result: 'Result',
+    workspaceChanges: 'Workspace changes',
+    changedFiles: '{files} files changed',
+    diffUnavailable: 'Diff unavailable',
+    binaryFileDiffUnavailable: 'Binary file diff unavailable',
     truncated: '... (truncated)',
     unchangedLines: '{count} unchanged lines',
     executionDuration: 'Execution time',
@@ -1054,8 +1058,11 @@ export default {
   plugins: {
     title: 'Plugins',
     refresh: 'Refresh',
-    notice: 'Read-only inventory of discoverable Hermes plugin manifests. Discovery metadata is read without loading plugin code. Management actions stay in CLI for v1; changes take effect in new Hermes sessions.',
+    notice: 'Inventory of discoverable Hermes plugin manifests. Discovery metadata is read without loading plugin code. Standalone user plugins can be enabled or disabled here; changes take effect in new Hermes sessions.',
     loadFailed: 'Failed to load plugins',
+    updateFailed: 'Failed to update plugin',
+    enableSuccess: 'Enabled {name}',
+    disableSuccess: 'Disabled {name}',
     commandCopied: 'Command copied',
     searchPlaceholder: 'Search key, name, description, path...',
     source: 'Source',
@@ -1103,7 +1110,7 @@ export default {
       kind: 'Kind',
       capabilities: 'Capabilities',
       path: 'Path / entrypoint',
-      cli: 'CLI',
+      manage: 'Manage',
     },
     capabilities: {
       tools: '{count} tools',
@@ -2348,6 +2355,12 @@ export default {
 
   // Changelog
   changelog: {
+    new_0_6_23_1: 'This release covers the PRs merged after 0.6.22, with updates to desktop self-update, MCP cleanup, Petdex pets, MCU voice, and several settings workflows',
+    new_0_6_23_2: 'Desktop self-update is back to a blocking flow, Windows shuts services down more reliably before updating, and desktop exit now cleans up gateway, profile MCP, and related child processes more completely',
+    new_0_6_23_3: 'Desktop MCP injection and Coding Agent MCP launch paths are more stable, Windows workspaces gained a drive picker, and symlink folder display plus desktop Petdex previews were fixed',
+    new_0_6_23_4: 'Petdex pets now support web pets, a standalone desktop pet window, immediate display after adoption, a top-right close control, and a more visible initial desktop size',
+    new_0_6_23_5: 'MCU and global voice handling now include audio prompts, OTA safeguards, segmented streaming TTS, cleanup for links, code blocks, and tables before speech, plus abort handling for unfinished TTS generation',
+    new_0_6_23_6: 'Settings and workflow polish continue with profile config editing, chat input height settings, login JWT expiry configuration, Skill editing, preserved local archive state in History, clearer new-chat drawer wording, and safer built-in Provider danger text',
     new_0_6_22_1: 'This release covers the PRs merged after 0.6.21, with front-end updates for combination models, session history, proxy settings, slash commands, and mobile layout polish',
     new_0_6_22_2: 'The Models page now includes a Combination Models panel, and chat can show real MoA reference and aggregator progress without the old synthetic placeholder tool',
     new_0_6_22_3: 'Chat sessions can be archived from the session list and restored from History, while local-only Claude Code and Codex sessions now appear correctly in History',

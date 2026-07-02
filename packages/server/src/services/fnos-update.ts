@@ -10,16 +10,20 @@ const CACHE_TTL_MS = 5 * 60 * 1000
 type FnosReleaseMetadata = {
   version?: unknown
   fpk_version?: unknown
+  native_shell_version?: unknown
+  webui_version?: unknown
   release_tag?: unknown
   download_url?: unknown
   release_url?: unknown
   packaging_repo?: unknown
+  source_repo?: unknown
   update_source?: unknown
   service_port?: unknown
   gateway_prefix?: unknown
   updated_at?: unknown
   built_from?: unknown
   bundled_runtime?: unknown
+  layers?: unknown
 }
 
 type FetchResponseLike = {
@@ -47,6 +51,11 @@ export type FnosUpdateStatus = {
   updatedAt: string
   builtFrom: string
   bundledRuntime: unknown | null
+  nativeShellVersion: string
+  webuiVersion: string
+  sourceRepo: string
+  packagingRepo: string
+  layers: unknown | null
   error?: string
 }
 
@@ -92,6 +101,8 @@ function readPackageVersion(): string {
 }
 
 function getLocalVersion(): string {
+  const nativeVersion = stringValue(process.env.HERMES_FNOS_NATIVE_VERSION)
+  if (nativeVersion) return nativeVersion
   return typeof __APP_VERSION__ !== 'undefined'
     ? __APP_VERSION__
     : readPackageVersion()
@@ -161,6 +172,11 @@ function buildUnavailableStatus(params: {
     updatedAt: '',
     builtFrom: '',
     bundledRuntime: null,
+    nativeShellVersion: '',
+    webuiVersion: '',
+    sourceRepo: '',
+    packagingRepo: '',
+    layers: null,
     error: params.error,
   }
 }
@@ -193,7 +209,9 @@ export async function checkFnosUpdateStatus(options: CheckFnosUpdateOptions = {}
     }
 
     const metadata = await response.json() as FnosReleaseMetadata
-    const latestVersion = stringValue(metadata.version) || stringValue(metadata.fpk_version)
+    const latestVersion = stringValue(metadata.fpk_version)
+      || stringValue(metadata.native_shell_version)
+      || stringValue(metadata.version)
     if (!latestVersion) {
       throw new Error('metadata is missing version')
     }
@@ -216,6 +234,11 @@ export async function checkFnosUpdateStatus(options: CheckFnosUpdateOptions = {}
       updatedAt: stringValue(metadata.updated_at),
       builtFrom: stringValue(metadata.built_from),
       bundledRuntime: metadata.bundled_runtime ?? null,
+      nativeShellVersion: stringValue(metadata.native_shell_version) || latestVersion,
+      webuiVersion: stringValue(metadata.webui_version),
+      sourceRepo: stringValue(metadata.source_repo),
+      packagingRepo: stringValue(metadata.packaging_repo),
+      layers: metadata.layers ?? null,
     }
 
     if (useCache) {

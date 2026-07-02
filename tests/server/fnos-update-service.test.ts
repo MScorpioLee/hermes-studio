@@ -7,13 +7,23 @@ describe('fnOS native update service', () => {
       ok: true,
       json: async () => ({
         appname: 'hermes-studio',
-        version: '0.6.25',
+        version: '0.6.23',
+        fpk_version: '0.6.25',
+        native_shell_version: '0.6.25',
+        webui_version: '0.6.23',
         release_tag: 'fnos-v0.6.25',
         download_url: 'https://github.com/MScorpioLee/hermes-studio/releases/download/fnos-v0.6.25/hermes-studio.fpk',
+        source_repo: 'https://github.com/EKKOLearnAI/hermes-studio',
         packaging_repo: 'https://github.com/MScorpioLee/hermes-studio',
         update_source: 'fnos-native',
         service_port: 6060,
         gateway_prefix: '/app/hermes-studio',
+        bundled_runtime: { hermes_agent: '0.17.0' },
+        layers: {
+          native_shell: { version: '0.6.25' },
+          webui: { version: '0.6.23' },
+          hermes_agent_runtime: { version: '0.17.0' },
+        },
         updated_at: '2026-07-01T02:00:00Z',
       }),
     }))
@@ -41,6 +51,16 @@ describe('fnOS native update service', () => {
       releaseTag: 'fnos-v0.6.25',
       servicePort: 6060,
       gatewayPrefix: '/app/hermes-studio',
+      nativeShellVersion: '0.6.25',
+      webuiVersion: '0.6.23',
+      sourceRepo: 'https://github.com/EKKOLearnAI/hermes-studio',
+      packagingRepo: 'https://github.com/MScorpioLee/hermes-studio',
+      bundledRuntime: { hermes_agent: '0.17.0' },
+      layers: {
+        native_shell: { version: '0.6.25' },
+        webui: { version: '0.6.23' },
+        hermes_agent_runtime: { version: '0.17.0' },
+      },
       checkedAt: '2026-07-01T02:30:00.000Z',
     })
   })

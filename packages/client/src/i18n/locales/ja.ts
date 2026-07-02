@@ -548,6 +548,10 @@ export default {
     tool: 'ツール',
     arguments: '引数',
     result: '結果',
+    workspaceChanges: 'ワークスペース変更',
+    changedFiles: '{files} ファイルを変更',
+    diffUnavailable: 'diff を表示できません',
+    binaryFileDiffUnavailable: 'バイナリファイルの diff は表示できません',
     truncated: '... (省略)',
     unchangedLines: '変更なし {count} 行',
     executionDuration: '実行時間',    thinkingLabel: '思考過程',
@@ -798,8 +802,11 @@ export default {
   plugins: {
     title: 'プラグイン',
     refresh: '更新',
-    notice: '検出可能な Hermes プラグイン manifest の読み取り専用インベントリです。検出メタデータはプラグインコードを読み込まずに取得します。v1 の管理操作は CLI のままで、変更は新しい Hermes セッションで有効になります。',
+    notice: '検出可能な Hermes プラグイン manifest のインベントリです。検出メタデータはプラグインコードを読み込まずに取得します。standalone ユーザープラグインはここで有効化または無効化でき、変更は新しい Hermes セッションで有効になります。',
     loadFailed: 'プラグインの読み込みに失敗しました',
+    updateFailed: 'プラグインの更新に失敗しました',
+    enableSuccess: '{name} を有効化しました',
+    disableSuccess: '{name} を無効化しました',
     commandCopied: 'コマンドをコピーしました',
     searchPlaceholder: 'key、名前、説明、パスを検索...',
     source: 'ソース',
@@ -847,7 +854,7 @@ export default {
       kind: '種類',
       capabilities: '機能',
       path: 'パス / entrypoint',
-      cli: 'CLI',
+      manage: '管理',
     },
     capabilities: {
       tools: '{count} tools',
@@ -1934,6 +1941,12 @@ export default {
 
   // 更新履歴
   changelog: {
+    new_0_6_23_1: 'このリリースでは 0.6.22 以降にマージされた PR を反映し、デスクトップ更新、MCP クリーンアップ、Petdex ペット、MCU 音声、設定ワークフローを改善しました',
+    new_0_6_23_2: 'デスクトップの自動更新はブロッキング方式に戻り、Windows 更新前のサービス停止がより確実になり、終了時には gateway、profile MCP、関連子プロセスをより完全に停止します',
+    new_0_6_23_3: 'デスクトップ MCP 注入と Coding Agent MCP の起動パスが安定し、Windows workspace にドライブ選択を追加し、シンボリックリンクフォルダ表示とデスクトップ Petdex プレビューを修正しました',
+    new_0_6_23_4: 'Petdex ペットは Web ペット、独立したデスクトップペットウィンドウ、採用後の即時表示、右上の閉じるボタン、見やすいデスクトップ初期サイズに対応しました',
+    new_0_6_23_5: 'MCU とグローバル音声は、音声プロンプト、OTA 保護、分割ストリーミング TTS、読み上げ前のリンク・コードブロック・表の整理、未完了 TTS の中断処理に対応しました',
+    new_0_6_23_6: 'profile 設定編集、チャット入力欄の高さ設定、ログイン JWT 有効期限設定、Skill 編集、History のローカルアーカイブ状態保持、新規チャットドロワー文言、組み込み Provider の危険操作文言を改善しました',
     new_0_6_22_1: 'このリリースでは 0.6.21 以降にマージされた PR を反映し、組み合わせモデル、セッション履歴、プロキシ設定、スラッシュコマンド、モバイルレイアウトを改善しました',
     new_0_6_22_2: 'モデルページに組み合わせモデルパネルを追加し、チャットでは古い合成プレースホルダーツールなしで実際の MoA reference と aggregator の進行状況を表示できます',
     new_0_6_22_3: 'チャットセッションを一覧からアーカイブし、履歴から復元できるようになりました。ローカルのみの Claude Code と Codex セッションも履歴に正しく表示されます',

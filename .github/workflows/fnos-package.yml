@@ -6,11 +6,7 @@ on:
       - main
     paths:
       - ".github/workflows/fnos-package.yml"
-      - "package.json"
-      - "package-lock.json"
-      - "bin/**"
       - "fnos/**"
-      - "packages/**"
       - "scripts/build-fnos-fpk.mjs"
   workflow_dispatch:
     inputs:
@@ -83,7 +79,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="$(node -p "require('./package.json').version")"
+          webui_version="$(node -p "require('./package.json').version")"
+          version="$(awk -F= '/^version[[:space:]]*=/{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}' fnos/hermes-studio/manifest)"
           release_tag="fnos-v${version}"
           download_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}/hermes-studio.fpk"
           cat > dist/fnos/hermes-studio.latest.json <<JSON
@@ -92,6 +89,8 @@ jobs:
             "display_name": "Hermes Studio",
             "version": "${version}",
             "fpk_version": "${version}",
+            "native_shell_version": "${version}",
+            "webui_version": "${webui_version}",
             "release_tag": "${release_tag}",
             "download_url": "${download_url}",
             "source_repo": "https://github.com/EKKOLearnAI/hermes-studio",
@@ -107,6 +106,20 @@ jobs:
               "node": "24.15.0",
               "python": "3.12",
               "hermes_agent": "${HERMES_VERSION}"
+            },
+            "layers": {
+              "native_shell": {
+                "version": "${version}",
+                "source": "https://github.com/${GITHUB_REPOSITORY}"
+              },
+              "webui": {
+                "version": "${webui_version}",
+                "source": "https://github.com/EKKOLearnAI/hermes-studio"
+              },
+              "hermes_agent_runtime": {
+                "version": "${HERMES_VERSION}",
+                "source": "https://github.com/EKKOLearnAI/hermes-studio"
+              }
             },
             "built_from": "${GITHUB_SHA}",
             "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

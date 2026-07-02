@@ -44,6 +44,7 @@ const PACKAGE_INFO = readPackageInfo()
 const LOCAL_VERSION = typeof __APP_VERSION__ !== 'undefined'
   ? __APP_VERSION__
   : PACKAGE_INFO?.version || ''
+const NATIVE_SHELL_VERSION = (process.env.HERMES_FNOS_NATIVE_VERSION || '').trim()
 
 let cachedLatestVersion = ''
 const AGENT_BRIDGE_HEALTH_CACHE_TTL_MS = 250
@@ -197,6 +198,9 @@ export async function healthCheck(ctx: any) {
     version: hermesVersion,
     gateway: 'running',
     webui_version: LOCAL_VERSION,
+    native_shell_version: NATIVE_SHELL_VERSION,
+    fnos_native_version: NATIVE_SHELL_VERSION,
+    hermes_agent_runtime_version: hermesVersion,
     webui_latest: isUpdateCheckDisabled() ? '' : cachedLatestVersion,
     webui_update_available: isUpdateCheckDisabled()
       ? false

@@ -51,16 +51,6 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
 
-      - name: Build updated fnOS package
-        if: steps.sync.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh workflow run fnos-package.yml --repo "${GH_REPO}" --ref main -f hermes_version=0.17.0
-
       - name: Summary
         shell: bash
         run: |
@@ -70,7 +60,7 @@ jobs:
             echo "- Changed: ${{ steps.sync.outputs.changed || 'false' }}"
             echo "- Upstream SHA: ${{ steps.sync.outputs.upstream_sha }}"
             if [ "${{ steps.sync.outputs.changed || 'false' }}" = "true" ]; then
-              echo "- Synced package version: ${{ steps.sync.outputs.version }}"
-              echo "- Triggered workflow: fnos-package.yml"
+              echo "- Synced Web UI version: ${{ steps.sync.outputs.version }}"
+              echo "- fnOS package: not triggered; native shell releases are versioned separately."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
