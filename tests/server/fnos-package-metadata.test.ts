@@ -17,6 +17,10 @@ function readRootJson<T>(...segments: string[]): T {
   return JSON.parse(readFileSync(join(root, ...segments), 'utf-8')) as T
 }
 
+function readRootFile(...segments: string[]): string {
+  return readFileSync(join(root, ...segments), 'utf-8')
+}
+
 function parseManifest(text: string): Record<string, string> {
   const entries: Record<string, string> = {}
   for (const line of text.split(/\r?\n/)) {
@@ -53,9 +57,9 @@ describe('fnOS package metadata', () => {
     const pkg = readRootJson<{ version: string }>('package.json')
 
     expect(pkg.version).toBe('0.6.23')
-    expect(manifest.version).toBe('0.6.30')
+    expect(manifest.version).toBe('0.6.31')
     expect(manifest.version).not.toBe(pkg.version)
-    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.30"')
+    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.31"')
     expect(manifest.platform).toBe('x86')
     expect(manifest.os_min_version).toBe('1.1.3100')
     expect(manifest.install_dep_apps).toBe('')
@@ -104,5 +108,27 @@ describe('fnOS package metadata', () => {
     expect(entry.allUsers).toBe(true)
     expect(mainScript).toContain('HERMES_WEB_UI_PUBLIC_BASE_PATH="/app/hermes-studio"')
     expect(mainScript).toContain('HERMES_WEB_UI_UNIX_SOCKET="${APP_DIR}/hermes-studio.sock"')
+  })
+
+  it('enables fnOS version management for downloaded Web UI and runtime layers', () => {
+    const commonScript = readFnOsFile('cmd', 'common')
+    const mainScript = readFnOsFile('cmd', 'main')
+    const buildScript = readRootFile('scripts', 'build-fnos-fpk.mjs')
+    const sidebar = readRootFile('packages', 'client', 'src', 'components', 'layout', 'AppSidebar.vue')
+
+    expect(sidebar).toContain('versionManagementEnabled')
+    expect(sidebar).toContain("VITE_HERMES_ENABLE_VERSION_MANAGEMENT === '1'")
+    expect(buildScript).toContain("VITE_HERMES_ENABLE_VERSION_MANAGEMENT: '1'")
+    expect(mainScript).toContain('HERMES_WEB_UI_ENABLE_VERSION_MANAGEMENT=1')
+    expect(mainScript).toContain('HERMES_AGENT_NODE_ROOT="$NODE_ROOT"')
+    expect(mainScript).toContain('PATH="${NODE_ROOT}/bin:${PYTHON_HOME}/bin:${PATH}"')
+
+    expect(commonScript).toContain('ACTIVE_VERSION_FILE="${VAR_DIR}/hermes-web-ui/desktop-runtime/active-version.json"')
+    expect(commonScript).toContain('read_active_version_field')
+    expect(commonScript).toContain('runtimeDirectory')
+    expect(commonScript).toContain('webUiDirectory')
+    expect(commonScript).toContain('runtime_dir_ready')
+    expect(commonScript).toContain('webui_dir_ready')
+    expect(commonScript).toContain('apply_active_version_overrides')
   })
 })

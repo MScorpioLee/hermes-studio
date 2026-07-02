@@ -132,6 +132,7 @@ async function buildWebUi() {
       ...process.env,
       HERMES_WEB_UI_PUBLIC_BASE_PATH: '/app/hermes-studio/',
       VITE_HERMES_DISABLE_VERSION_PREVIEW: '1',
+      VITE_HERMES_ENABLE_VERSION_MANAGEMENT: '1',
     },
   })
 }

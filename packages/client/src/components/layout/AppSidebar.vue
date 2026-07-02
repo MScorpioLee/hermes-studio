@@ -29,6 +29,9 @@ const versionPreviewDisabled = import.meta.env.VITE_HERMES_DISABLE_VERSION_PREVI
 const isDesktopShell = computed(() =>
   (window as typeof window & { hermesDesktop?: { isDesktop?: boolean } }).hermesDesktop?.isDesktop === true,
 );
+const versionManagementEnabled = computed(() =>
+  isDesktopShell.value || import.meta.env.VITE_HERMES_ENABLE_VERSION_MANAGEMENT === '1',
+);
 const showChangelog = ref(false);
 const showVersionManagement = ref(false);
 
@@ -346,7 +349,7 @@ function openVersionManagement() {
         </span>
         <ThemeSwitch />
       </div>
-      <NButton v-if="isDesktopShell" type="primary" size="tiny" block class="update-btn" @click="openVersionManagement">
+      <NButton v-if="versionManagementEnabled" type="primary" size="tiny" block class="update-btn" @click="openVersionManagement">
         {{ t('sidebar.versionManagement') }}
       </NButton>
       <NButton v-if="appStore.clientOutdated" type="warning" size="tiny" block class="update-btn" @click="handleReloadClient">
@@ -386,7 +389,7 @@ function openVersionManagement() {
         </div>
       </div>
     </NModal>
-    <VersionManagementModal v-if="isDesktopShell" v-model:show="showVersionManagement" />
+    <VersionManagementModal v-if="versionManagementEnabled" v-model:show="showVersionManagement" />
   </aside>
 </template>
 

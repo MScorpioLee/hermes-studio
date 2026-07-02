@@ -13,13 +13,19 @@ PID_FILE="${RUN_DIR}/hermes-studio.pid"
 LOG_FILE="${LOG_DIR}/hermes-studio.log"
 PREVIEW_DIR="${VAR_DIR}/hermes-web-ui/hermes-web-ui-pereview"
 PREVIEW_HOME_DIR="${VAR_DIR}/hermes-web-ui/hermes-web-ui-pereview-home"
+ACTIVE_VERSION_FILE="${VAR_DIR}/hermes-web-ui/desktop-runtime/active-version.json"
 
 DEFAULT_PORT="${TRIM_SERVICE_PORT:-6060}"
-NODE_BIN="${APP_DIR}/runtime/node/bin/node"
-PYTHON_HOME="${APP_DIR}/runtime/python"
+BUNDLED_NODE_ROOT="${APP_DIR}/runtime/node"
+BUNDLED_NODE_BIN="${BUNDLED_NODE_ROOT}/bin/node"
+BUNDLED_PYTHON_HOME="${APP_DIR}/runtime/python"
+BUNDLED_SERVER_DIR="${APP_DIR}/server"
+NODE_ROOT="$BUNDLED_NODE_ROOT"
+NODE_BIN="$BUNDLED_NODE_BIN"
+PYTHON_HOME="$BUNDLED_PYTHON_HOME"
 PYTHON_BIN="${PYTHON_HOME}/bin/python3"
 HERMES_BIN_VALUE="${PYTHON_HOME}/bin/hermes"
-SERVER_DIR="${APP_DIR}/server"
+SERVER_DIR="$BUNDLED_SERVER_DIR"
 SERVER_ENTRY="${SERVER_DIR}/dist/server/index.js"
 GATEWAY_SOCKET="${APP_DIR}/hermes-studio.sock"
 PORT_VALUE="$DEFAULT_PORT"
@@ -53,6 +59,87 @@ clean_preview_runtime() {
 
 clean_gateway_socket() {
     rm -f "$GATEWAY_SOCKET"
+}
+
+runtime_platform_key() {
+    local os_name arch_name
+    os_name="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+    arch_name="$(uname -m 2>/dev/null)"
+
+    case "$os_name" in
+        linux*) os_name="linux" ;;
+        darwin*) os_name="mac" ;;
+        mingw*|msys*|cygwin*) os_name="win" ;;
+    esac
+
+    case "$arch_name" in
+        x86_64|amd64) arch_name="x64" ;;
+        aarch64) arch_name="arm64" ;;
+    esac
+
+    printf '%s-%s\n' "$os_name" "$arch_name"
+}
+
+read_active_version_field() {
+    local field="$1"
+    local allowed_root="$2"
+    [ -f "$ACTIVE_VERSION_FILE" ] || return 1
+    ensure_executable "$BUNDLED_NODE_BIN" || return 1
+
+    "$BUNDLED_NODE_BIN" -e '
+const fs = require("fs");
+const path = require("path");
+const [file, field, allowedRoot, platform] = process.argv.slice(1);
+try {
+  const data = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (data.platform !== platform) process.exit(2);
+  const value = typeof data[field] === "string" ? data[field].trim() : "";
+  if (!value) process.exit(3);
+  const resolved = fs.realpathSync(value);
+  const root = fs.realpathSync(allowedRoot);
+  const relative = path.relative(root, resolved);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) process.exit(4);
+  process.stdout.write(resolved);
+} catch {
+  process.exit(1);
+}
+' "$ACTIVE_VERSION_FILE" "$field" "$allowed_root" "$(runtime_platform_key)"
+}
+
+runtime_dir_ready() {
+    local root="$1"
+    [ -n "$root" ] \
+        && [ -f "${root}/python/bin/python3" ] \
+        && [ -f "${root}/python/bin/hermes" ] \
+        && [ -f "${root}/node/bin/node" ] \
+        && [ -f "${root}/runtime-manifest.json" ]
+}
+
+webui_dir_ready() {
+    local root="$1"
+    [ -n "$root" ] \
+        && [ -f "${root}/package.json" ] \
+        && [ -f "${root}/bin/hermes-web-ui.mjs" ] \
+        && [ -f "${root}/dist/server/index.js" ]
+}
+
+apply_active_version_overrides() {
+    local runtime_dir webui_dir
+
+    runtime_dir="$(read_active_version_field runtimeDirectory "${VAR_DIR}/hermes-web-ui/desktop-runtime/hermes" 2>/dev/null || true)"
+    if runtime_dir_ready "$runtime_dir"; then
+        NODE_ROOT="${runtime_dir}/node"
+        NODE_BIN="${NODE_ROOT}/bin/node"
+        PYTHON_HOME="${runtime_dir}/python"
+        PYTHON_BIN="${PYTHON_HOME}/bin/python3"
+        HERMES_BIN_VALUE="${PYTHON_HOME}/bin/hermes"
+    fi
+
+    webui_dir="$(read_active_version_field webUiDirectory "${VAR_DIR}/hermes-web-ui/webui" 2>/dev/null || true)"
+    if webui_dir_ready "$webui_dir"; then
+        SERVER_DIR="$webui_dir"
+        SERVER_ENTRY="${SERVER_DIR}/dist/server/index.js"
+    fi
 }
 
 is_valid_port() {
@@ -234,8 +321,13 @@ app_pids() {
     if command -v pgrep >/dev/null 2>&1; then
         for pattern in \
             "$SERVER_ENTRY" \
-            "${APP_DIR}/runtime/node/bin/node" \
-            "${APP_DIR}/runtime/python" \
+            "$NODE_BIN" \
+            "$PYTHON_HOME" \
+            "$BUNDLED_NODE_BIN" \
+            "$BUNDLED_PYTHON_HOME" \
+            "${VAR_DIR}/hermes-web-ui/desktop-runtime/hermes" \
+            "${VAR_DIR}/hermes-web-ui/webui" \
+            "${BUNDLED_SERVER_DIR}/dist/server/agent-bridge" \
             "${SERVER_DIR}/dist/server/agent-bridge"; do
             pgrep -f "$pattern" 2>/dev/null || true
         done
@@ -359,3 +451,6 @@ clean_data_share_paths() {
     done
     IFS="$old_ifs"
 }
+
+load_runtime_config
+apply_active_version_overrides
