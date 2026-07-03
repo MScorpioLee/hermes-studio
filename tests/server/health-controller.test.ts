@@ -15,6 +15,7 @@ type LoadHealthControllerOptions = {
   bridgeReadinessError?: Error
   managerError?: Error
   runtimeStateError?: Error
+  runtimeVersionStatus?: any
 }
 
 const defaultBridgeReadiness = {
@@ -61,6 +62,12 @@ async function loadHealthController(options: LoadHealthControllerOptions = {}) {
     getAgentBridgeManager,
   }))
 
+  if (options.runtimeVersionStatus) {
+    vi.doMock('../../packages/server/src/services/runtime-version-manager', () => ({
+      getRuntimeVersionStatus: vi.fn().mockResolvedValue(options.runtimeVersionStatus),
+    }))
+  }
+
   const health = await import('../../packages/server/src/controllers/health')
 
   return {
@@ -90,6 +97,8 @@ describe('health controller version metadata', () => {
     vi.restoreAllMocks()
     vi.resetModules()
     ;(globalThis as any).__APP_VERSION__ = 'test'
+    delete process.env.HERMES_WEB_UI_UPDATE_MODE
+    vi.doUnmock('../../packages/server/src/services/runtime-version-manager')
   })
 
   it('reads the root package version in ts-node/dev mode instead of falling back to 0.0.0', async () => {
@@ -158,6 +167,31 @@ describe('health controller version metadata', () => {
     expect(ctx.body.webui_latest).toBe('0.6.17')
     expect(ctx.body.webui_update_available).toBe(false)
     expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('Update available'))
+  })
+
+  it('checks the version-management manifest instead of npm when Web UI managed updates are enabled', async () => {
+    process.env.HERMES_WEB_UI_UPDATE_MODE = 'version-managed'
+    const fetchMock = vi.fn().mockRejectedValue(new Error('npm registry should not be used'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { checkLatestVersion, healthCheck } = await loadHealthController({
+      injectedVersion: '0.6.23',
+      runtimeVersionStatus: {
+        webui: {
+          currentVersion: '0.6.23',
+          remoteVersions: ['0.6.23', '0.6.24'],
+        },
+      },
+    })
+
+    await checkLatestVersion()
+
+    const ctx = createMockCtx()
+    await healthCheck(ctx)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(ctx.body.webui_latest).toBe('0.6.24')
+    expect(ctx.body.webui_update_available).toBe(true)
   })
 
   it('does not throw when latest-version lookup fails', async () => {

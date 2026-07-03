@@ -1028,6 +1028,66 @@ function runUpdateInstall() {
   return runNpmSync(['install', '-g', 'hermes-web-ui@latest'], { timeout: 10 * 60 * 1000 })
 }
 
+function compareUpdateVersions(left: string, right: string): number {
+  const normalize = (value: string) => value.trim().replace(/^v/i, '').split(/[.-]/)
+  const leftParts = normalize(left)
+  const rightParts = normalize(right)
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const leftPart = leftParts[index] || '0'
+    const rightPart = rightParts[index] || '0'
+    const leftNumber = Number.parseInt(leftPart, 10)
+    const rightNumber = Number.parseInt(rightPart, 10)
+    const numeric = Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
+    const diff = numeric ? leftNumber - rightNumber : leftPart.localeCompare(rightPart, undefined, { numeric: true })
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+function versionManagedWebUiUpdateEnabled(): boolean {
+  return String(process.env.HERMES_WEB_UI_UPDATE_MODE || '').trim().toLowerCase() === 'version-managed'
+}
+
+function versionManagedDownloadSource(): 'github' | 'cf' {
+  return String(process.env.HERMES_WEB_UI_UPDATE_SOURCE || '').trim().toLowerCase() === 'cf' ? 'cf' : 'github'
+}
+
+function newestVersionAfter(versions: string[], currentVersion: string): string {
+  return [...new Set(versions.map(version => version.trim().replace(/^v/i, '')).filter(Boolean))]
+    .filter(version => !currentVersion || compareUpdateVersions(version, currentVersion) > 0)
+    .sort((left, right) => compareUpdateVersions(right, left))[0] || ''
+}
+
+async function runVersionManagedWebUiUpdate() {
+  const {
+    activateDownloadedWebUiVersion,
+    downloadWebUiVersion,
+    getRuntimeVersionStatus,
+  } = await import('../services/runtime-version-manager')
+
+  const status = await getRuntimeVersionStatus()
+  const currentVersion = status.webui.currentVersion || readPackageInfo()?.version || ''
+  const latestVersion = newestVersionAfter(status.webui.remoteVersions, currentVersion)
+  if (!latestVersion) {
+    return {
+      version: currentVersion,
+      restartRequired: false,
+      message: currentVersion
+        ? `Hermes Web UI is already up to date: ${currentVersion}`
+        : 'Hermes Web UI is already up to date',
+    }
+  }
+
+  const installed = await downloadWebUiVersion(latestVersion, versionManagedDownloadSource())
+  activateDownloadedWebUiVersion(installed.version)
+
+  return {
+    version: installed.version,
+    restartRequired: true,
+    message: `Hermes Web UI ${installed.version} installed; restarting to apply it`,
+  }
+}
+
 function spawnRestart(port: string) {
   const cli = getGlobalCliScript()
 
@@ -1037,6 +1097,46 @@ function spawnRestart(port: string) {
     windowsHide: true,
     env: getCurrentNodeEnv(),
   })
+}
+
+function spawnFnosServiceRestart() {
+  const cmdPath = String(process.env.HERMES_FNOS_CMD_PATH || '').trim()
+  const appDir = String(process.env.HERMES_FNOS_APP_DIR || '').trim()
+  const varDir = String(process.env.HERMES_FNOS_VAR_DIR || '').trim()
+  const logFile = String(process.env.HERMES_FNOS_RESTART_LOG || '').trim() || '/tmp/hermes-studio-fnos-restart.log'
+  if (!cmdPath || !existsSync(cmdPath)) return null
+
+  const script = [
+    'set +e',
+    'sleep 1',
+    `kill -TERM ${process.pid} >/dev/null 2>&1 || true`,
+    `for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 ${process.pid} >/dev/null 2>&1 || break; sleep 1; done`,
+    'TRIM_APPDEST="$1" TRIM_PKGVAR="$2" "$3" start >> "$4" 2>&1',
+  ].join('\n')
+
+  return spawn('/bin/sh', ['-c', script, 'hermes-fnos-restart', appDir, varDir, cmdPath, logFile], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+    env: getCurrentNodeEnv(),
+  })
+}
+
+function scheduleVersionManagedRestart() {
+  const restart = spawnFnosServiceRestart()
+  if (restart) {
+    restart.on('error', err => {
+      updateInProgress = false
+      console.error('[update] failed to spawn fnOS restart:', err)
+    })
+    restart.unref()
+    return true
+  }
+
+  setTimeout(() => {
+    process.exit(0)
+  }, 1000).unref?.()
+  return true
 }
 
 export async function handleUpdate(ctx: any) {
@@ -1053,6 +1153,21 @@ export async function handleUpdate(ctx: any) {
   let keepUpdateLockForRestart = false
 
   try {
+    if (versionManagedWebUiUpdateEnabled()) {
+      const result = await runVersionManagedWebUiUpdate()
+      ctx.body = {
+        success: true,
+        message: result.message,
+        version: result.version,
+        restart_required: result.restartRequired,
+        update_mode: 'version-managed',
+      }
+      if (result.restartRequired) {
+        keepUpdateLockForRestart = scheduleVersionManagedRestart()
+      }
+      return
+    }
+
     const output = runUpdateInstall()
 
     ctx.body = {

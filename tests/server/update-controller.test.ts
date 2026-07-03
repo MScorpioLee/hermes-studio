@@ -9,6 +9,11 @@ type UpdateControllerMocks = {
   existsSync: ReturnType<typeof vi.fn>
   readFileSync: ReturnType<typeof vi.fn>
   appendFileSync: ReturnType<typeof vi.fn>
+  runtimeVersions?: {
+    getRuntimeVersionStatus: ReturnType<typeof vi.fn>
+    downloadWebUiVersion: ReturnType<typeof vi.fn>
+    activateDownloadedWebUiVersion: ReturnType<typeof vi.fn>
+  }
 }
 
 async function loadUpdateController(overrides: Partial<UpdateControllerMocks> = {}) {
@@ -36,6 +41,9 @@ async function loadUpdateController(overrides: Partial<UpdateControllerMocks> = 
     rmSync: vi.fn(),
     writeFileSync: vi.fn(),
   }))
+  if (overrides.runtimeVersions) {
+    vi.doMock('../../packages/server/src/services/runtime-version-manager', () => overrides.runtimeVersions)
+  }
 
   const mod = await import('../../packages/server/src/controllers/update')
   return {
@@ -94,6 +102,12 @@ describe('update controller', () => {
     delete process.env.HERMES_WEB_UI_PREVIEW_REPO
     delete process.env.HERMES_WEB_UI_DISABLE_VERSION_PREVIEW
     delete process.env.HERMES_WEB_UI_DISABLE_PREVIEW_RUNTIME
+    delete process.env.HERMES_WEB_UI_UPDATE_MODE
+    delete process.env.HERMES_WEB_UI_UPDATE_SOURCE
+    delete process.env.HERMES_FNOS_CMD_PATH
+    delete process.env.HERMES_FNOS_APP_DIR
+    delete process.env.HERMES_FNOS_VAR_DIR
+    vi.doUnmock('../../packages/server/src/services/runtime-version-manager')
   })
 
   it('updates and restarts through the running Node executable, not PATH shims', async () => {
@@ -214,6 +228,47 @@ describe('update controller', () => {
     expect(ctx.body).toEqual({ success: false, message: 'engine mismatch' })
     expect(mocks.spawn).not.toHaveBeenCalled()
     expect(exitSpy).not.toHaveBeenCalled()
+  })
+
+  it('installs the latest Web UI through version management instead of global npm when enabled', async () => {
+    process.env.HERMES_WEB_UI_UPDATE_MODE = 'version-managed'
+    const runtimeVersions = {
+      getRuntimeVersionStatus: vi.fn().mockResolvedValue({
+        webui: {
+          currentVersion: '0.6.23',
+          remoteVersions: ['0.6.23', '0.6.24'],
+        },
+      }),
+      downloadWebUiVersion: vi.fn().mockResolvedValue({
+        version: '0.6.24',
+        directory: '/tmp/hermes-web-ui/webui/0.6.24',
+        active: false,
+      }),
+      activateDownloadedWebUiVersion: vi.fn().mockReturnValue({
+        schema: 1,
+        webUiVersion: '0.6.24',
+        webUiDirectory: '/tmp/hermes-web-ui/webui/0.6.24',
+      }),
+    }
+    const execFileSync = vi.fn().mockReturnValue('unexpected npm install')
+    const { handleUpdate, mocks } = await loadUpdateController({ execFileSync, runtimeVersions })
+    const ctx = createMockCtx()
+
+    await handleUpdate(ctx)
+
+    expect(runtimeVersions.getRuntimeVersionStatus).toHaveBeenCalledOnce()
+    expect(runtimeVersions.downloadWebUiVersion).toHaveBeenCalledWith('0.6.24', 'github')
+    expect(runtimeVersions.activateDownloadedWebUiVersion).toHaveBeenCalledWith('0.6.24')
+    expect(mocks.execFileSync).not.toHaveBeenCalledWith(
+      process.execPath,
+      expect.arrayContaining(['install', '-g', 'hermes-web-ui@latest']),
+      expect.anything(),
+    )
+    expect(ctx.body).toMatchObject({
+      success: true,
+      version: '0.6.24',
+      restart_required: true,
+    })
   })
 
   it('loads preview tags through async git with a short timeout', async () => {

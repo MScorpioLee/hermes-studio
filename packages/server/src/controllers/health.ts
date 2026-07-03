@@ -83,6 +83,10 @@ function isUpdateCheckDisabled(): boolean {
   return raw === 'true' || raw === '1' || raw === 'on' || raw === 'yes'
 }
 
+function versionManagedWebUiUpdateEnabled(): boolean {
+  return String(process.env.HERMES_WEB_UI_UPDATE_MODE || '').trim().toLowerCase() === 'version-managed'
+}
+
 function compareVersions(left: string, right: string): number {
   const normalize = (value: string) => value.trim().replace(/^v/i, '').split(/[.-]/)
   const leftParts = normalize(left)
@@ -103,9 +107,24 @@ function isNewerVersion(candidate: string, current: string): boolean {
   return compareVersions(candidate, current) > 0
 }
 
+function newestRemoteWebUiVersion(versions: string[]): string {
+  return [...new Set(versions.map(version => version.trim().replace(/^v/i, '')).filter(Boolean))]
+    .sort((left, right) => compareVersions(right, left))[0] || ''
+}
+
 export async function checkLatestVersion(): Promise<void> {
   if (isUpdateCheckDisabled()) return
   try {
+    if (versionManagedWebUiUpdateEnabled()) {
+      const { getRuntimeVersionStatus } = await import('../services/runtime-version-manager')
+      const status = await getRuntimeVersionStatus()
+      cachedLatestVersion = newestRemoteWebUiVersion(status.webui.remoteVersions)
+      if (LOCAL_VERSION && cachedLatestVersion && isNewerVersion(cachedLatestVersion, LOCAL_VERSION)) {
+        console.log(`Update available: ${LOCAL_VERSION} → ${cachedLatestVersion}`)
+      }
+      return
+    }
+
     const packageName = PACKAGE_INFO?.name || 'hermes-web-ui'
     const registryName = encodeURIComponent(packageName)
     const res = await fetch(`https://registry.npmjs.org/${registryName}/latest`, { signal: AbortSignal.timeout(10000) })
