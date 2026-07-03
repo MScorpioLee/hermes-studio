@@ -221,7 +221,8 @@ describe('health controller version metadata', () => {
 
     expect(fetchMock).not.toHaveBeenCalled()
     expect(ctx.body.webui_latest).toBe('0.6.24')
-    expect(ctx.body.webui_update_available).toBe(true)
+    expect(ctx.body.webui_update_available).toBe(false)
+    expect(ctx.body.update_available).toBe(true)
     expect(ctx.body.hermes_agent_runtime_latest).toBe('0.18.0')
     expect(ctx.body.hermes_agent_runtime_update_available).toBe(true)
   })

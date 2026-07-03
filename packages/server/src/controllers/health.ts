@@ -253,7 +253,7 @@ export async function healthCheck(ctx: any) {
     hermes_agent_runtime_update_available: runtimeUpdateAvailable,
     webui_latest: updateDisabled ? '' : cachedLatestVersion,
     webui_layer_update_available: webUiLayerUpdateAvailable,
-    webui_update_available: updateAvailable,
+    webui_update_available: webUiLayerUpdateAvailable,
     update_available: updateAvailable,
     node_version: process.versions.node,
     agent_bridge: agentBridge,
