@@ -217,6 +217,8 @@ export default {
     disconnected: 'Getrennt',
     updateTip: 'Fuhren Sie "hermes-web-ui update" im Terminal aus, um zu aktualisieren',
     updateVersion: 'Aktualisieren auf v{version}',
+    updateRuntimeVersion: 'Runtime auf v{version} aktualisieren',
+    updateWebUiRuntimeVersion: 'Web UI v{webui} / Runtime v{runtime} aktualisieren',
     reloadClientVersion: 'Für v{version} neu laden',
     updating: 'Aktualisierung...',
     updateSuccess: 'Aktualisierung erfolgreich. Bitte aktualisieren Sie die Seite in Kurze. Wenn der Dienst langere Zeit nicht startet, starten Sie ihn manuell.',

@@ -217,6 +217,8 @@ export default {
     disconnected: '연결 끊김',
     updateTip: '터미널에서 "hermes-web-ui update"를 실행하여 업데이트하세요',
     updateVersion: 'v{version}(으)로 업그레이드',
+    updateRuntimeVersion: 'Runtime v{version}(으)로 업그레이드',
+    updateWebUiRuntimeVersion: 'Web UI v{webui} / Runtime v{runtime}(으)로 업그레이드',
     reloadClientVersion: 'v{version}(으)로 새로고침',
     updating: '업데이트 중...',
     updateSuccess: '업데이트가 완료되었습니다. 잠시 후 페이지를 새로고침하세요. 오랫동안 시작되지 않으면 수동으로 시작하세요.',

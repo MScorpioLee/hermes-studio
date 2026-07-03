@@ -227,6 +227,8 @@ export default {
     expand: 'Expand menu',
     updateTip: 'Run "hermes-web-ui update" in terminal to update',
     updateVersion: 'Upgrade to v{version}',
+    updateRuntimeVersion: 'Upgrade Runtime to v{version}',
+    updateWebUiRuntimeVersion: 'Upgrade Web UI v{webui} / Runtime v{runtime}',
     reloadClientVersion: 'Reload for v{version}',
     updating: 'Updating...',
     updateSuccess: 'Update successful. Please refresh the page shortly. If it does not start after a while, start it manually.',

@@ -1052,39 +1052,76 @@ function versionManagedDownloadSource(): 'github' | 'cf' {
   return String(process.env.HERMES_WEB_UI_UPDATE_SOURCE || '').trim().toLowerCase() === 'cf' ? 'cf' : 'github'
 }
 
-function newestVersionAfter(versions: string[], currentVersion: string): string {
+function newestVersionAfter(versions: string[] = [], currentVersion: string): string {
   return [...new Set(versions.map(version => version.trim().replace(/^v/i, '')).filter(Boolean))]
     .filter(version => !currentVersion || compareUpdateVersions(version, currentVersion) > 0)
     .sort((left, right) => compareUpdateVersions(right, left))[0] || ''
 }
 
-async function runVersionManagedWebUiUpdate() {
+type VersionManagedUpdateLayer = 'webui' | 'runtime'
+
+async function runVersionManagedLayerUpdate() {
   const {
     activateDownloadedWebUiVersion,
+    activateInstalledRuntimeVersion,
+    downloadRuntimeVersion,
     downloadWebUiVersion,
     getRuntimeVersionStatus,
   } = await import('../services/runtime-version-manager')
 
   const status = await getRuntimeVersionStatus()
-  const currentVersion = status.webui.currentVersion || readPackageInfo()?.version || ''
-  const latestVersion = newestVersionAfter(status.webui.remoteVersions, currentVersion)
-  if (!latestVersion) {
+  const source = versionManagedDownloadSource()
+  const currentWebUiVersion = status.webui?.activeVersion || status.webui?.currentVersion || readPackageInfo()?.version || ''
+  const currentRuntimeVersion = status.hermes?.activeVersion || ''
+  const latestWebUiVersion = newestVersionAfter(status.webui?.remoteVersions || [], currentWebUiVersion)
+  const latestRuntimeVersion = newestVersionAfter(status.hermes?.remoteVersions || [], currentRuntimeVersion)
+
+  if (!latestWebUiVersion && !latestRuntimeVersion) {
     return {
-      version: currentVersion,
+      version: currentWebUiVersion || currentRuntimeVersion,
+      webUiVersion: currentWebUiVersion,
+      runtimeVersion: currentRuntimeVersion,
+      updatedLayers: [] as VersionManagedUpdateLayer[],
       restartRequired: false,
-      message: currentVersion
-        ? `Hermes Web UI is already up to date: ${currentVersion}`
-        : 'Hermes Web UI is already up to date',
+      message: 'Hermes Web UI and Runtime are already up to date',
     }
   }
 
-  const installed = await downloadWebUiVersion(latestVersion, versionManagedDownloadSource())
-  activateDownloadedWebUiVersion(installed.version)
+  const downloadedWebUi = latestWebUiVersion
+    ? await downloadWebUiVersion(latestWebUiVersion, source)
+    : null
+  const downloadedRuntime = latestRuntimeVersion
+    ? await downloadRuntimeVersion(latestRuntimeVersion, source)
+    : null
+
+  const updatedLayers: VersionManagedUpdateLayer[] = []
+  let webUiVersion = currentWebUiVersion
+  let runtimeVersion = currentRuntimeVersion
+
+  if (downloadedWebUi) {
+    activateDownloadedWebUiVersion(downloadedWebUi.version)
+    webUiVersion = downloadedWebUi.version
+    updatedLayers.push('webui')
+  }
+
+  if (downloadedRuntime) {
+    const active = activateInstalledRuntimeVersion(downloadedRuntime.version)
+    runtimeVersion = active.hermesRuntimeVersion || downloadedRuntime.manifestHermesRuntimeVersion || downloadedRuntime.version
+    updatedLayers.push('runtime')
+  }
+
+  const installedMessages = [
+    downloadedWebUi ? `Web UI ${webUiVersion}` : '',
+    downloadedRuntime ? `Runtime ${runtimeVersion}` : '',
+  ].filter(Boolean)
 
   return {
-    version: installed.version,
+    version: downloadedWebUi ? webUiVersion : runtimeVersion,
+    webUiVersion,
+    runtimeVersion,
+    updatedLayers,
     restartRequired: true,
-    message: `Hermes Web UI ${installed.version} installed; restarting to apply it`,
+    message: `${installedMessages.join(' and ')} installed; restarting to apply updates`,
   }
 }
 
@@ -1154,11 +1191,14 @@ export async function handleUpdate(ctx: any) {
 
   try {
     if (versionManagedWebUiUpdateEnabled()) {
-      const result = await runVersionManagedWebUiUpdate()
+      const result = await runVersionManagedLayerUpdate()
       ctx.body = {
         success: true,
         message: result.message,
         version: result.version,
+        webui_version: result.webUiVersion,
+        runtime_version: result.runtimeVersion,
+        updated_layers: result.updatedLayers,
         restart_required: result.restartRequired,
         update_mode: 'version-managed',
       }

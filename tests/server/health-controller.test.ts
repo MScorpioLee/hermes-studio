@@ -194,6 +194,38 @@ describe('health controller version metadata', () => {
     expect(ctx.body.webui_update_available).toBe(true)
   })
 
+  it('reports an update when only the managed Hermes Runtime has a newer version', async () => {
+    process.env.HERMES_WEB_UI_UPDATE_MODE = 'version-managed'
+    const fetchMock = vi.fn().mockRejectedValue(new Error('npm registry should not be used'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { checkLatestVersion, healthCheck } = await loadHealthController({
+      injectedVersion: '0.6.24',
+      runtimeVersionStatus: {
+        hermes: {
+          activeVersion: '0.11.0',
+          remoteVersions: ['0.11.0', '0.18.0'],
+        },
+        webui: {
+          currentVersion: '0.6.24',
+          activeVersion: '0.6.24',
+          remoteVersions: ['0.6.24'],
+        },
+      },
+    })
+
+    await checkLatestVersion()
+
+    const ctx = createMockCtx()
+    await healthCheck(ctx)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(ctx.body.webui_latest).toBe('0.6.24')
+    expect(ctx.body.webui_update_available).toBe(true)
+    expect(ctx.body.hermes_agent_runtime_latest).toBe('0.18.0')
+    expect(ctx.body.hermes_agent_runtime_update_available).toBe(true)
+  })
+
   it('does not throw when latest-version lookup fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
 

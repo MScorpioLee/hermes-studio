@@ -217,6 +217,8 @@ export default {
     disconnected: 'Desconectado',
     updateTip: 'Ejecuta "hermes-web-ui update" en la terminal para actualizar',
     updateVersion: 'Actualizar a v{version}',
+    updateRuntimeVersion: 'Actualizar Runtime a v{version}',
+    updateWebUiRuntimeVersion: 'Actualizar Web UI v{webui} / Runtime v{runtime}',
     reloadClientVersion: 'Recargar para v{version}',
     updating: 'Actualizando...',
     updateSuccess: 'Actualizacion completada. Actualiza la pagina en breve. Si no se inicia despues de un tiempo, inicialo manualmente.',

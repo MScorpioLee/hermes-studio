@@ -217,6 +217,8 @@ export default {
     disconnected: '未接続',
     updateTip: 'ターミナルで "hermes-web-ui update" を実行して更新してください',
     updateVersion: 'v{version} にアップグレード',
+    updateRuntimeVersion: 'Runtime を v{version} にアップグレード',
+    updateWebUiRuntimeVersion: 'Web UI v{webui} / Runtime v{runtime} にアップグレード',
     reloadClientVersion: 'v{version} に再読み込み',
     updating: '更新中...',
     updateSuccess: '更新が完了しました。しばらくしてからページを再読み込みしてください。長時間起動しない場合は手動で起動してください。',

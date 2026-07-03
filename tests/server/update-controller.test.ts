@@ -13,6 +13,8 @@ type UpdateControllerMocks = {
     getRuntimeVersionStatus: ReturnType<typeof vi.fn>
     downloadWebUiVersion: ReturnType<typeof vi.fn>
     activateDownloadedWebUiVersion: ReturnType<typeof vi.fn>
+    downloadRuntimeVersion?: ReturnType<typeof vi.fn>
+    activateInstalledRuntimeVersion?: ReturnType<typeof vi.fn>
   }
 }
 
@@ -234,8 +236,13 @@ describe('update controller', () => {
     process.env.HERMES_WEB_UI_UPDATE_MODE = 'version-managed'
     const runtimeVersions = {
       getRuntimeVersionStatus: vi.fn().mockResolvedValue({
+        hermes: {
+          activeVersion: '0.17.0',
+          remoteVersions: ['0.17.0'],
+        },
         webui: {
           currentVersion: '0.6.23',
+          activeVersion: '0.6.23',
           remoteVersions: ['0.6.23', '0.6.24'],
         },
       }),
@@ -249,6 +256,8 @@ describe('update controller', () => {
         webUiVersion: '0.6.24',
         webUiDirectory: '/tmp/hermes-web-ui/webui/0.6.24',
       }),
+      downloadRuntimeVersion: vi.fn(),
+      activateInstalledRuntimeVersion: vi.fn(),
     }
     const execFileSync = vi.fn().mockReturnValue('unexpected npm install')
     const { handleUpdate, mocks } = await loadUpdateController({ execFileSync, runtimeVersions })
@@ -259,6 +268,8 @@ describe('update controller', () => {
     expect(runtimeVersions.getRuntimeVersionStatus).toHaveBeenCalledOnce()
     expect(runtimeVersions.downloadWebUiVersion).toHaveBeenCalledWith('0.6.24', 'github')
     expect(runtimeVersions.activateDownloadedWebUiVersion).toHaveBeenCalledWith('0.6.24')
+    expect(runtimeVersions.downloadRuntimeVersion).not.toHaveBeenCalled()
+    expect(runtimeVersions.activateInstalledRuntimeVersion).not.toHaveBeenCalled()
     expect(mocks.execFileSync).not.toHaveBeenCalledWith(
       process.execPath,
       expect.arrayContaining(['install', '-g', 'hermes-web-ui@latest']),
@@ -267,6 +278,62 @@ describe('update controller', () => {
     expect(ctx.body).toMatchObject({
       success: true,
       version: '0.6.24',
+      webui_version: '0.6.24',
+      updated_layers: ['webui'],
+      restart_required: true,
+    })
+  })
+
+  it('installs the latest Hermes Runtime through version management when Web UI is current', async () => {
+    process.env.HERMES_WEB_UI_UPDATE_MODE = 'version-managed'
+    const runtimeVersions = {
+      getRuntimeVersionStatus: vi.fn().mockResolvedValue({
+        hermes: {
+          activeVersion: '0.17.0',
+          remoteVersions: ['0.17.0', '0.18.0'],
+        },
+        webui: {
+          currentVersion: '0.6.24',
+          activeVersion: '0.6.24',
+          remoteVersions: ['0.6.24'],
+        },
+      }),
+      downloadWebUiVersion: vi.fn(),
+      activateDownloadedWebUiVersion: vi.fn(),
+      downloadRuntimeVersion: vi.fn().mockResolvedValue({
+        version: '0.18.0',
+        platform: 'linux-x64',
+        directory: '/tmp/hermes-web-ui/desktop-runtime/hermes/0.18.0/linux-x64',
+        active: false,
+        manifestHermesRuntimeVersion: '0.18.0',
+      }),
+      activateInstalledRuntimeVersion: vi.fn().mockReturnValue({
+        schema: 1,
+        hermesRuntimeVersion: '0.18.0',
+        runtimeDirectory: '/tmp/hermes-web-ui/desktop-runtime/hermes/0.18.0/linux-x64',
+      }),
+    }
+    const execFileSync = vi.fn().mockReturnValue('unexpected npm install')
+    const { handleUpdate, mocks } = await loadUpdateController({ execFileSync, runtimeVersions })
+    const ctx = createMockCtx()
+
+    await handleUpdate(ctx)
+
+    expect(runtimeVersions.getRuntimeVersionStatus).toHaveBeenCalledOnce()
+    expect(runtimeVersions.downloadWebUiVersion).not.toHaveBeenCalled()
+    expect(runtimeVersions.activateDownloadedWebUiVersion).not.toHaveBeenCalled()
+    expect(runtimeVersions.downloadRuntimeVersion).toHaveBeenCalledWith('0.18.0', 'github')
+    expect(runtimeVersions.activateInstalledRuntimeVersion).toHaveBeenCalledWith('0.18.0')
+    expect(mocks.execFileSync).not.toHaveBeenCalledWith(
+      process.execPath,
+      expect.arrayContaining(['install', '-g', 'hermes-web-ui@latest']),
+      expect.anything(),
+    )
+    expect(ctx.body).toMatchObject({
+      success: true,
+      version: '0.18.0',
+      runtime_version: '0.18.0',
+      updated_layers: ['runtime'],
       restart_required: true,
     })
   })

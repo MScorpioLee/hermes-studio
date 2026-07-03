@@ -227,6 +227,8 @@ export default {
     expand: '展开菜单',
     updateTip: '在终端运行 "hermes-web-ui update" 即可更新',
     updateVersion: '升级版本 v{version}',
+    updateRuntimeVersion: '升级 Runtime v{version}',
+    updateWebUiRuntimeVersion: '升级 Web UI v{webui} / Runtime v{runtime}',
     reloadClientVersion: '刷新到 v{version}',
     updating: '正在更新...',
     updateSuccess: '更新成功，请稍后刷新页面，如长时间未启动，请手动启动',

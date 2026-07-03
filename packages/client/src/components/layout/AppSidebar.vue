@@ -34,6 +34,19 @@ const versionManagementEnabled = computed(() =>
 );
 const showChangelog = ref(false);
 const showVersionManagement = ref(false);
+const updateButtonText = computed(() => {
+  if (appStore.updating) return t('sidebar.updating')
+  if (appStore.updateLayer === 'runtime') {
+    return t('sidebar.updateRuntimeVersion', { version: appStore.runtimeLatestVersion || appStore.latestVersion })
+  }
+  if (appStore.updateLayer === 'both') {
+    return t('sidebar.updateWebUiRuntimeVersion', {
+      webui: appStore.latestVersion,
+      runtime: appStore.runtimeLatestVersion,
+    })
+  }
+  return t('sidebar.updateVersion', { version: appStore.latestVersion })
+})
 
 function hasRoute(name: string): boolean {
   return router.hasRoute(name);
@@ -356,7 +369,7 @@ function openVersionManagement() {
         {{ t('sidebar.reloadClientVersion', { version: appStore.serverVersion }) }}
       </NButton>
       <NButton v-if="appStore.updateAvailable" type="primary" size="tiny" block class="update-btn" :loading="appStore.updating" @click="handleUpdate">
-        {{ appStore.updating ? t('sidebar.updating') : t('sidebar.updateVersion', { version: appStore.latestVersion }) }}
+        {{ updateButtonText }}
       </NButton>
     </div>
 

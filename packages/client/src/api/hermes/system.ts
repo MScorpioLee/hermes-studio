@@ -9,8 +9,12 @@ export interface HealthResponse {
   native_shell_version?: string
   fnos_native_version?: string
   hermes_agent_runtime_version?: string
+  hermes_agent_runtime_latest?: string
+  hermes_agent_runtime_update_available?: boolean
   webui_latest?: string
+  webui_layer_update_available?: boolean
   webui_update_available?: boolean
+  update_available?: boolean
   node_version?: string
   agent_bridge?: {
     status: string
@@ -166,8 +170,17 @@ export async function checkHealth(): Promise<HealthResponse> {
   return request<HealthResponse>('/health')
 }
 
-export async function triggerUpdate(): Promise<{ success: boolean; message: string }> {
-  return request<{ success: boolean; message: string }>('/api/hermes/update', { method: 'POST' })
+export async function triggerUpdate(): Promise<{
+  success: boolean
+  message: string
+  version?: string
+  webui_version?: string
+  runtime_version?: string
+  updated_layers?: Array<'webui' | 'runtime'>
+  restart_required?: boolean
+  update_mode?: string
+}> {
+  return request('/api/hermes/update', { method: 'POST' })
 }
 
 export async function fetchPreviewStatus(): Promise<PreviewStatus> {

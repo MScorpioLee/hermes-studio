@@ -9,7 +9,9 @@ const mockAppStore = vi.hoisted(() => ({
   connected: true,
   serverVersion: 'test',
   latestVersion: '',
+  runtimeLatestVersion: '',
   updateAvailable: false,
+  updateLayer: '',
   clientOutdated: false,
   updating: false,
   toggleSidebar: vi.fn(),
@@ -108,7 +110,9 @@ describe('AppSidebar navigation', () => {
     openSessionSearchMock.mockClear()
     mockAppStore.serverVersion = 'test'
     mockAppStore.latestVersion = ''
+    mockAppStore.runtimeLatestVersion = ''
     mockAppStore.updateAvailable = false
+    mockAppStore.updateLayer = ''
     mockAppStore.clientOutdated = false
     mockAppStore.updating = false
     mockAppStore.sidebarCollapsed = false

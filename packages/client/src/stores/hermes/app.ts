@@ -22,6 +22,7 @@ const WEB_UI_VERSION = __APP_VERSION__
 const SIDEBAR_COLLAPSED_KEY = 'hermes_sidebar_collapsed'
 const ACTIVE_PROFILE_STORAGE_KEY = 'hermes_active_profile_name'
 const MODELS_CACHE_TTL_MS = 30000
+type UpdateLayer = '' | 'webui' | 'runtime' | 'both'
 
 export const useAppStore = defineStore('app', () => {
   const sidebarOpen = ref(false)
@@ -31,7 +32,9 @@ export const useAppStore = defineStore('app', () => {
   const connected = ref(false)
   const serverVersion = ref(WEB_UI_VERSION)
   const latestVersion = ref('')
+  const runtimeLatestVersion = ref('')
   const updateAvailable = ref(false)
+  const updateLayer = ref<UpdateLayer>('')
   const clientOutdated = ref(false)
   const updating = ref(false)
   const modelGroups = ref<AvailableModelGroup[]>([])
@@ -75,7 +78,17 @@ export const useAppStore = defineStore('app', () => {
       if (res.webui_version) serverVersion.value = res.webui_version
       clientOutdated.value = !!res.webui_version && res.webui_version !== WEB_UI_VERSION
       if (res.webui_latest) latestVersion.value = res.webui_latest
-      updateAvailable.value = !!res.webui_update_available
+      runtimeLatestVersion.value = res.hermes_agent_runtime_latest || ''
+      const webUiLayerUpdateAvailable = !!res.webui_layer_update_available
+      const runtimeLayerUpdateAvailable = !!res.hermes_agent_runtime_update_available
+      updateAvailable.value = res.update_available ?? (webUiLayerUpdateAvailable || runtimeLayerUpdateAvailable || !!res.webui_update_available)
+      updateLayer.value = webUiLayerUpdateAvailable && runtimeLayerUpdateAvailable
+        ? 'both'
+        : webUiLayerUpdateAvailable
+          ? 'webui'
+          : runtimeLayerUpdateAvailable
+            ? 'runtime'
+            : ''
       if (res.node_version) nodeVersion.value = res.node_version
     } catch {
       connected.value = false
@@ -342,8 +355,10 @@ export const useAppStore = defineStore('app', () => {
     connected,
     serverVersion,
     latestVersion,
+    runtimeLatestVersion,
     nodeVersion,
     updateAvailable,
+    updateLayer,
     clientOutdated,
     updating,
     doUpdate,

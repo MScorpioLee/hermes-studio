@@ -149,6 +149,8 @@ export default {
     expand: 'Развернуть меню',
     updateTip: 'Для обновления выполните в терминале "hermes-web-ui update"',
     updateVersion: 'Обновить до версии v{version}',
+    updateRuntimeVersion: 'Обновить Runtime до версии v{version}',
+    updateWebUiRuntimeVersion: 'Обновить Web UI v{webui} / Runtime v{runtime}',
     reloadClientVersion: 'Обновить клиент до v{version}',
     updating: 'Обновление...',
     updateSuccess: 'Обновление успешно. Обновите страницу. Если долго не запускается, запустите вручную.',

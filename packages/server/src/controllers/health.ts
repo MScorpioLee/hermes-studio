@@ -47,6 +47,9 @@ const LOCAL_VERSION = typeof __APP_VERSION__ !== 'undefined'
 const NATIVE_SHELL_VERSION = (process.env.HERMES_FNOS_NATIVE_VERSION || '').trim()
 
 let cachedLatestVersion = ''
+let cachedLatestRuntimeVersion = ''
+let cachedManagedCurrentWebUiVersion = ''
+let cachedManagedCurrentRuntimeVersion = ''
 const AGENT_BRIDGE_HEALTH_CACHE_TTL_MS = 250
 const AGENT_BRIDGE_HEALTH_FIRST_WAIT_MS = 75
 
@@ -107,7 +110,7 @@ function isNewerVersion(candidate: string, current: string): boolean {
   return compareVersions(candidate, current) > 0
 }
 
-function newestRemoteWebUiVersion(versions: string[]): string {
+function newestRemoteVersion(versions: string[] = []): string {
   return [...new Set(versions.map(version => version.trim().replace(/^v/i, '')).filter(Boolean))]
     .sort((left, right) => compareVersions(right, left))[0] || ''
 }
@@ -118,13 +121,22 @@ export async function checkLatestVersion(): Promise<void> {
     if (versionManagedWebUiUpdateEnabled()) {
       const { getRuntimeVersionStatus } = await import('../services/runtime-version-manager')
       const status = await getRuntimeVersionStatus()
-      cachedLatestVersion = newestRemoteWebUiVersion(status.webui.remoteVersions)
-      if (LOCAL_VERSION && cachedLatestVersion && isNewerVersion(cachedLatestVersion, LOCAL_VERSION)) {
-        console.log(`Update available: ${LOCAL_VERSION} → ${cachedLatestVersion}`)
+      cachedManagedCurrentWebUiVersion = status.webui?.activeVersion || status.webui?.currentVersion || LOCAL_VERSION
+      cachedManagedCurrentRuntimeVersion = status.hermes?.activeVersion || ''
+      cachedLatestVersion = newestRemoteVersion(status.webui?.remoteVersions || [])
+      cachedLatestRuntimeVersion = newestRemoteVersion(status.hermes?.remoteVersions || [])
+      if (cachedManagedCurrentWebUiVersion && cachedLatestVersion && isNewerVersion(cachedLatestVersion, cachedManagedCurrentWebUiVersion)) {
+        console.log(`Web UI update available: ${cachedManagedCurrentWebUiVersion} → ${cachedLatestVersion}`)
+      }
+      if (cachedManagedCurrentRuntimeVersion && cachedLatestRuntimeVersion && isNewerVersion(cachedLatestRuntimeVersion, cachedManagedCurrentRuntimeVersion)) {
+        console.log(`Hermes Runtime update available: ${cachedManagedCurrentRuntimeVersion} → ${cachedLatestRuntimeVersion}`)
       }
       return
     }
 
+    cachedLatestRuntimeVersion = ''
+    cachedManagedCurrentWebUiVersion = ''
+    cachedManagedCurrentRuntimeVersion = ''
     const packageName = PACKAGE_INFO?.name || 'hermes-web-ui'
     const registryName = encodeURIComponent(packageName)
     const res = await fetch(`https://registry.npmjs.org/${registryName}/latest`, { signal: AbortSignal.timeout(10000) })
@@ -211,6 +223,23 @@ export async function healthCheck(ctx: any) {
   const raw = await hermesCli.getVersion()
   const hermesVersion = raw.split('\n')[0].replace('Hermes Agent ', '') || ''
   const agentBridge = await getAgentBridgeHealth()
+  const updateDisabled = isUpdateCheckDisabled()
+  const managedUpdateMode = versionManagedWebUiUpdateEnabled()
+  const webUiVersionForUpdate = managedUpdateMode
+    ? (cachedManagedCurrentWebUiVersion || LOCAL_VERSION)
+    : LOCAL_VERSION
+  const runtimeVersionForUpdate = managedUpdateMode
+    ? (cachedManagedCurrentRuntimeVersion || hermesVersion)
+    : hermesVersion
+  const webUiLayerUpdateAvailable = !updateDisabled
+    && Boolean(webUiVersionForUpdate && cachedLatestVersion && isNewerVersion(cachedLatestVersion, webUiVersionForUpdate))
+  const runtimeUpdateAvailable = !updateDisabled
+    && managedUpdateMode
+    && Boolean(runtimeVersionForUpdate && cachedLatestRuntimeVersion && isNewerVersion(cachedLatestRuntimeVersion, runtimeVersionForUpdate))
+  const updateAvailable = managedUpdateMode
+    ? webUiLayerUpdateAvailable || runtimeUpdateAvailable
+    : webUiLayerUpdateAvailable
+
   ctx.body = {
     status: 'ok',
     platform: 'hermes-agent',
@@ -220,10 +249,12 @@ export async function healthCheck(ctx: any) {
     native_shell_version: NATIVE_SHELL_VERSION,
     fnos_native_version: NATIVE_SHELL_VERSION,
     hermes_agent_runtime_version: hermesVersion,
-    webui_latest: isUpdateCheckDisabled() ? '' : cachedLatestVersion,
-    webui_update_available: isUpdateCheckDisabled()
-      ? false
-      : Boolean(LOCAL_VERSION && cachedLatestVersion && isNewerVersion(cachedLatestVersion, LOCAL_VERSION)),
+    hermes_agent_runtime_latest: updateDisabled ? '' : cachedLatestRuntimeVersion,
+    hermes_agent_runtime_update_available: runtimeUpdateAvailable,
+    webui_latest: updateDisabled ? '' : cachedLatestVersion,
+    webui_layer_update_available: webUiLayerUpdateAvailable,
+    webui_update_available: updateAvailable,
+    update_available: updateAvailable,
     node_version: process.versions.node,
     agent_bridge: agentBridge,
   }

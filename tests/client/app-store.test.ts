@@ -193,6 +193,26 @@ describe('App Store', () => {
     expect(store.clientOutdated).toBe(false)
   })
 
+  it('surfaces runtime-only managed updates as an available update', async () => {
+    mockSystemApi.checkHealth.mockResolvedValue({
+      status: 'ok',
+      webui_version: 'test',
+      webui_latest: 'test',
+      webui_update_available: false,
+      hermes_agent_runtime_version: '0.17.0',
+      hermes_agent_runtime_latest: '0.18.0',
+      hermes_agent_runtime_update_available: true,
+    })
+    const store = useAppStore()
+
+    await store.checkConnection()
+
+    expect(store.updateAvailable).toBe(true)
+    expect(store.latestVersion).toBe('test')
+    expect(store.runtimeLatestVersion).toBe('0.18.0')
+    expect(store.updateLayer).toBe('runtime')
+  })
+
   it('clears the updating state and reports failure when self-update request fails', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockSystemApi.triggerUpdate.mockRejectedValue(new Error('install failed'))
