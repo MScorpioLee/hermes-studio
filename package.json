@@ -8,6 +8,7 @@
   },
   "homepage": "https://hermes-studio.ai",
   "license": "BSL-1.1",
+  "hermesFnosCompatible": true,
   "engines": {
     "node": ">=23.0.0"
   },

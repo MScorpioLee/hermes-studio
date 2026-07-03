@@ -125,6 +125,44 @@ webui_dir_ready() {
         && [ -f "${root}/dist/server/index.js" ]
 }
 
+webui_dir_compatible() {
+    local root="$1"
+    [ -n "$root" ] || return 1
+    ensure_executable "$BUNDLED_NODE_BIN" || return 1
+
+    "$BUNDLED_NODE_BIN" -e '
+const fs = require("fs");
+const path = require("path");
+const root = process.argv[1];
+try {
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  process.exit(pkg && pkg.hermesFnosCompatible === true ? 0 : 1);
+} catch {
+  process.exit(1);
+}
+' "$root"
+}
+
+clear_active_webui_override() {
+    [ -f "$ACTIVE_VERSION_FILE" ] || return 0
+    ensure_executable "$BUNDLED_NODE_BIN" || return 0
+
+    "$BUNDLED_NODE_BIN" -e '
+const fs = require("fs");
+const file = process.argv[1];
+try {
+  const data = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (!data.webUiDirectory && !data.webUiVersion) process.exit(0);
+  delete data.webUiDirectory;
+  delete data.webUiVersion;
+  data.updatedAt = new Date().toISOString();
+  fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+} catch {
+  process.exit(0);
+}
+' "$ACTIVE_VERSION_FILE" >/dev/null 2>&1 || true
+}
+
 apply_active_version_overrides() {
     local runtime_dir webui_dir
 
@@ -139,9 +177,11 @@ apply_active_version_overrides() {
     fi
 
     webui_dir="$(read_active_version_field webUiDirectory "${VAR_DIR}/hermes-web-ui/webui" 2>/dev/null || true)"
-    if webui_dir_ready "$webui_dir"; then
+    if webui_dir_ready "$webui_dir" && webui_dir_compatible "$webui_dir"; then
         SERVER_DIR="$webui_dir"
         SERVER_ENTRY="${SERVER_DIR}/dist/server/index.js"
+    elif [ -n "$webui_dir" ]; then
+        clear_active_webui_override
     fi
 }
 
