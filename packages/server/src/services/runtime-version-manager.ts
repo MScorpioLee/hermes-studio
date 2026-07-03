@@ -122,9 +122,16 @@ function downloadBaseUrl(): string {
   return (process.env.HERMES_WEB_UI_DOWNLOAD_BASE_URL || DEFAULT_DOWNLOAD_BASE_URL).trim().replace(/\/$/, '')
 }
 
-function downloadAssetUrl(assetName: string, tag: string, source: VersionDownloadSource): string {
+function githubRepoForAsset(assetName: string): string {
+  if (assetName.startsWith('hermes-runtime-')) {
+    return process.env.HERMES_RUNTIME_DOWNLOAD_GITHUB_REPO?.trim() || DEFAULT_GITHUB_REPO
+  }
+  return process.env.HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO?.trim() || DEFAULT_GITHUB_REPO
+}
+
+export function buildVersionDownloadAssetUrl(assetName: string, tag: string, source: VersionDownloadSource): string {
   if (source === 'github') {
-    const repo = process.env.HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO?.trim() || DEFAULT_GITHUB_REPO
+    const repo = githubRepoForAsset(assetName)
     return `https://github.com/${repo}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(assetName)}`
   }
   return `${downloadBaseUrl()}/${encodeURIComponent(tag)}/${encodeURIComponent(assetName)}`
@@ -403,14 +410,14 @@ export async function downloadRuntimeVersion(version: string, source: VersionDow
   const platform = runtimePlatformKey()
   const releaseTag = `hermes-${cleanVersion}-runtime`
   const manifestName = `hermes-runtime-${platform}.json`
-  const manifestUrl = downloadAssetUrl(manifestName, releaseTag, source)
+  const manifestUrl = buildVersionDownloadAssetUrl(manifestName, releaseTag, source)
   onProgress?.({ stage: 'resolve', message: 'runtimeVersions.jobStage.resolveRuntime' })
   const manifest = await fetchJson<RuntimePackageManifest>(manifestUrl)
   const asset = manifest.asset
   if (!asset?.name) throw new Error(`Runtime manifest is missing asset.name: ${manifestUrl}`)
   const assetName = asset.name
 
-  const assetUrl = downloadAssetUrl(assetName, releaseTag, source)
+  const assetUrl = buildVersionDownloadAssetUrl(assetName, releaseTag, source)
   const targetRoot = join(desktopRuntimeRoot(), 'hermes', cleanVersion, platform)
   const archive = join(desktopRuntimeRoot(), `${basename(assetName)}.download`)
   const tempRoot = join(desktopRuntimeRoot(), `.runtime-download-${process.pid}-${Date.now()}`)
@@ -457,13 +464,13 @@ export async function downloadWebUiVersion(version: string, source: VersionDownl
   const releaseTag = `v${cleanVersion}`
   const assetName = `hermes-web-ui-${cleanVersion}.tar.gz`
   const manifestName = `hermes-web-ui-${cleanVersion}.json`
-  const manifestUrl = downloadAssetUrl(manifestName, releaseTag, source)
+  const manifestUrl = buildVersionDownloadAssetUrl(manifestName, releaseTag, source)
   onProgress?.({ stage: 'resolve', message: 'runtimeVersions.jobStage.resolveWebUi' })
   const manifest = await fetchJson<{ asset?: { sha256?: string; size?: number } }>(manifestUrl)
   const archive = join(desktopRuntimeRoot(), `${assetName}.download`)
   const tempRoot = join(desktopRuntimeRoot(), `.webui-download-${process.pid}-${Date.now()}`)
   const targetRoot = join(config.appHome, 'webui', cleanVersion)
-  const assetUrl = downloadAssetUrl(assetName, releaseTag, source)
+  const assetUrl = buildVersionDownloadAssetUrl(assetName, releaseTag, source)
 
   mkdirSync(desktopRuntimeRoot(), { recursive: true })
   rmSync(tempRoot, { recursive: true, force: true })

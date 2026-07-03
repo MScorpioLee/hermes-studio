@@ -60,4 +60,23 @@ describe('runtime version manager', () => {
       }),
     ])
   })
+
+  it('uses separate GitHub repositories for Web UI and runtime downloads', async () => {
+    process.env.HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO = 'MScorpioLee/hermes-studio'
+    process.env.HERMES_RUNTIME_DOWNLOAD_GITHUB_REPO = 'EKKOLearnAI/hermes-studio'
+
+    const { buildVersionDownloadAssetUrl } = await import('../../packages/server/src/services/runtime-version-manager')
+
+    expect(buildVersionDownloadAssetUrl(
+      'hermes-web-ui-0.6.25.json',
+      'v0.6.25',
+      'github',
+    )).toBe('https://github.com/MScorpioLee/hermes-studio/releases/download/v0.6.25/hermes-web-ui-0.6.25.json')
+
+    expect(buildVersionDownloadAssetUrl(
+      'hermes-runtime-linux-x64.json',
+      'hermes-0.18.0-runtime',
+      'github',
+    )).toBe('https://github.com/EKKOLearnAI/hermes-studio/releases/download/hermes-0.18.0-runtime/hermes-runtime-linux-x64.json')
+  })
 })
