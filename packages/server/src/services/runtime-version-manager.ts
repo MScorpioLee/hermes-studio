@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { accessSync, chmodSync, constants, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { get as httpGet } from 'http'
 import { get as httpsGet } from 'https'
 import { basename, dirname, join, relative, resolve } from 'path'
@@ -8,9 +8,14 @@ import { config } from '../config'
 import { getHermesWebUiVersion } from './system-info'
 
 const ACTIVE_VERSION_FILE = 'active-version.json'
-const DEFAULT_REMOTE_MANIFEST_URL = 'https://hermes-studio.ai/versions.json'
+const UPSTREAM_REMOTE_MANIFEST_URL = 'https://hermes-studio.ai/versions.json'
+const FNOS_REMOTE_MANIFEST_URL = 'https://raw.githubusercontent.com/MScorpioLee/hermes-studio/main/fnos/hermes-studio/webui-versions.json'
 const DEFAULT_DOWNLOAD_BASE_URL = 'https://download.ekkolearnai.com'
 const DEFAULT_GITHUB_REPO = 'EKKOLearnAI/hermes-studio'
+
+function defaultRemoteManifestUrl(): string {
+  return process.env.HERMES_FNOS_NATIVE_VERSION ? FNOS_REMOTE_MANIFEST_URL : UPSTREAM_REMOTE_MANIFEST_URL
+}
 
 export interface ActiveVersionManifest {
   schema: number
@@ -182,7 +187,24 @@ function requiredRuntimeFiles(root: string): string[] {
 }
 
 function missingRuntimeFiles(root: string): string[] {
-  return requiredRuntimeFiles(root).filter(file => !existsSync(file))
+  return requiredRuntimeFiles(root).filter(file => {
+    if (!existsSync(file)) return true
+    if (process.platform === 'win32' || file.endsWith('.json')) return false
+    try {
+      accessSync(file, constants.X_OK)
+      return false
+    } catch {
+      return true
+    }
+  })
+}
+
+function ensureRuntimeExecutablePermissions(root: string): void {
+  if (process.platform === 'win32') return
+  for (const file of requiredRuntimeFiles(root)) {
+    if (file.endsWith('.json') || !existsSync(file)) continue
+    chmodSync(file, 0o755)
+  }
 }
 
 export function listInstalledRuntimeVersions(active = readActiveVersionManifest()): InstalledRuntimeVersion[] {
@@ -293,7 +315,7 @@ function currentRuntimeVersionRecord(active: ActiveVersionManifest | null): Inst
 }
 
 async function fetchRemoteVersions(): Promise<{ manifest: RemoteVersionManifest | null; error: string }> {
-  const url = process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || DEFAULT_REMOTE_MANIFEST_URL
+  const url = process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || defaultRemoteManifestUrl()
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
     if (!response.ok) return { manifest: null, error: `GET ${url} returned ${response.status}` }
@@ -317,7 +339,7 @@ export async function getRuntimeVersionStatus(): Promise<RuntimeVersionStatus> {
     active,
     platform: runtimePlatformKey(),
     activeVersionPath: activeVersionPath(),
-    remoteManifestUrl: process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || DEFAULT_REMOTE_MANIFEST_URL,
+    remoteManifestUrl: process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || defaultRemoteManifestUrl(),
     remoteError: error,
     hermes: {
       activeVersion: active?.hermesRuntimeVersion || currentRuntime?.manifestHermesRuntimeVersion || '',
@@ -435,6 +457,7 @@ export async function downloadRuntimeVersion(version: string, source: VersionDow
     }
     onProgress?.({ stage: 'extract', message: 'runtimeVersions.jobStage.extractRuntime' })
     await extractTarGzip(archive, tempRoot)
+    ensureRuntimeExecutablePermissions(tempRoot)
     const missing = missingRuntimeFiles(tempRoot)
     if (missing.length > 0) {
       throw new Error(`Runtime archive is missing required files: ${missing.map(file => relative(tempRoot, file)).join(', ')}`)

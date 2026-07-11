@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from 'fs'
 import { resolve } from 'path'
-import * as hermesCli from '../services/hermes/hermes-cli'
 import { getAgentBridgeManager } from '../services/hermes/agent-bridge/manager'
 import { redactAgentBridgeError } from '../services/hermes/agent-bridge/redact'
 import { isDockerContainer } from '../services/runtime-environment'
+import { getHermesAgentRuntimeVersion } from '../services/system-info'
 
 declare const __APP_VERSION__: string
 
@@ -221,8 +221,7 @@ async function refreshAgentBridgeHealth(): Promise<AgentBridgeHealthPayload> {
 }
 
 export async function healthCheck(ctx: any) {
-  const raw = await hermesCli.getVersion()
-  const hermesVersion = raw.split('\n')[0].replace('Hermes Agent ', '') || ''
+  const hermesVersion = await getHermesAgentRuntimeVersion()
   const agentBridge = await getAgentBridgeHealth()
   const updateDisabled = isUpdateCheckDisabled()
   const managedUpdateMode = versionManagedWebUiUpdateEnabled()

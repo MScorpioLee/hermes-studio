@@ -2,7 +2,7 @@ import { arch, hostname, platform, release, type } from 'os'
 import { createHash, generateKeyPairSync, sign, verify } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
 import { mkdir, readFile, writeFile } from 'fs/promises'
-import { dirname, resolve } from 'path'
+import { dirname, join, resolve } from 'path'
 import { config } from '../config'
 import * as hermesCli from './hermes/hermes-cli'
 
@@ -10,6 +10,11 @@ declare const __APP_VERSION__: string
 
 type PackageInfo = {
   version: string
+}
+
+type ActiveRuntimeManifest = {
+  hermesRuntimeVersion?: unknown
+  runtimeDirectory?: unknown
 }
 
 export type PublicSystemInfo = {
@@ -67,7 +72,33 @@ export function getHermesWebUiVersion(): string {
 }
 
 export function normalizeHermesAgentVersion(raw: string): string {
-  return raw.split('\n')[0]?.replace(/^Hermes Agent\s+/, '').trim() || ''
+  return raw.split('\n')[0]?.replace(/^Hermes Agent\s+/, '').trim().split(/\s+/)[0] || ''
+}
+
+function readJsonFile<T>(file: string): T | null {
+  if (!existsSync(file)) return null
+  try {
+    return JSON.parse(readFileSync(file, 'utf-8')) as T
+  } catch {
+    return null
+  }
+}
+
+export function getHermesAgentRuntimeVersionFromManifest(): string {
+  const active = readJsonFile<ActiveRuntimeManifest>(join(config.appHome, 'desktop-runtime', 'active-version.json'))
+  const activeVersion = typeof active?.hermesRuntimeVersion === 'string' ? active.hermesRuntimeVersion.trim() : ''
+  if (activeVersion) return activeVersion
+
+  const runtimeDirectory = typeof active?.runtimeDirectory === 'string' ? active.runtimeDirectory.trim() : ''
+  if (!runtimeDirectory) return ''
+
+  const manifest = readJsonFile<{ hermesAgentVersion?: unknown }>(join(runtimeDirectory, 'runtime-manifest.json'))
+  return typeof manifest?.hermesAgentVersion === 'string' ? manifest.hermesAgentVersion.trim() : ''
+}
+
+export async function getHermesAgentRuntimeVersion(): Promise<string> {
+  const cliVersion = normalizeHermesAgentVersion(await hermesCli.getVersion())
+  return cliVersion || getHermesAgentRuntimeVersionFromManifest()
 }
 
 function isValidDeviceIdentity(value: any): value is DeviceIdentity {
@@ -152,7 +183,7 @@ export function verifyDeviceSignature(input: {
 }
 
 export async function getPublicSystemInfo(): Promise<PublicSystemInfo> {
-  const hermesAgentVersion = normalizeHermesAgentVersion(await hermesCli.getVersion())
+  const hermesAgentVersion = await getHermesAgentRuntimeVersion()
   const identity = await getDeviceIdentity()
 
   return {

@@ -1,11 +1,11 @@
 import { arch, hostname, platform, release, type } from 'os'
 import { generateKeyPairSync, sign } from 'crypto'
-import { mkdtempSync, rmSync } from 'fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-async function loadSystemInfoWithInjectedVersion(version?: string) {
+async function loadSystemInfoWithInjectedVersion(version?: string, hermesCliVersion = 'Hermes Agent v0.15.2\n') {
   vi.resetModules()
   const appHome = mkdtempSync(join(tmpdir(), 'hermes-system-info-test-'))
   if (version === undefined) {
@@ -15,7 +15,7 @@ async function loadSystemInfoWithInjectedVersion(version?: string) {
   }
 
   vi.doMock('../../packages/server/src/services/hermes/hermes-cli', () => ({
-    getVersion: vi.fn().mockResolvedValue('Hermes Agent v0.15.2\n'),
+    getVersion: vi.fn().mockResolvedValue(hermesCliVersion),
   }))
 
   vi.doMock('../../packages/server/src/config', () => ({
@@ -55,6 +55,27 @@ describe('public system info', () => {
           arch: arch(),
         },
         hermes_agent_version: 'v0.15.2',
+        hermes_web_ui_version: '9.9.9-test',
+      })
+    } finally {
+      rmSync(appHome, { recursive: true, force: true })
+    }
+  })
+
+  it('falls back to active runtime manifest when Hermes CLI version is unavailable', async () => {
+    const { getPublicSystemInfo, appHome } = await loadSystemInfoWithInjectedVersion('9.9.9-test', '')
+
+    try {
+      const runtimeDir = join(appHome, 'desktop-runtime', 'hermes', '0.18.2', 'linux-x64')
+      mkdirSync(runtimeDir, { recursive: true })
+      writeFileSync(join(runtimeDir, 'runtime-manifest.json'), JSON.stringify({ hermesAgentVersion: '0.18.2' }))
+      writeFileSync(join(appHome, 'desktop-runtime', 'active-version.json'), JSON.stringify({
+        schema: 1,
+        runtimeDirectory: runtimeDir,
+      }))
+
+      await expect(getPublicSystemInfo()).resolves.toMatchObject({
+        hermes_agent_version: '0.18.2',
         hermes_web_ui_version: '9.9.9-test',
       })
     } finally {
