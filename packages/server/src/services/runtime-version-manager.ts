@@ -9,7 +9,7 @@ import { getHermesWebUiVersion } from './system-info'
 
 const ACTIVE_VERSION_FILE = 'active-version.json'
 const UPSTREAM_REMOTE_MANIFEST_URL = 'https://hermes-studio.ai/versions.json'
-const FNOS_REMOTE_MANIFEST_URL = 'https://raw.githubusercontent.com/MScorpioLee/hermes-studio/main/fnos/hermes-studio/webui-versions.json'
+const FNOS_REMOTE_MANIFEST_URL = 'https://cdn.jsdelivr.net/gh/MScorpioLee/hermes-studio@main/fnos/hermes-studio/webui-versions.json'
 const DEFAULT_DOWNLOAD_BASE_URL = 'https://download.ekkolearnai.com'
 const DEFAULT_GITHUB_REPO = 'EKKOLearnAI/hermes-studio'
 
