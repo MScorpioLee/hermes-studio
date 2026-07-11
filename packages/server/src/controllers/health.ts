@@ -3,6 +3,7 @@ import { resolve } from 'path'
 import * as hermesCli from '../services/hermes/hermes-cli'
 import { getAgentBridgeManager } from '../services/hermes/agent-bridge/manager'
 import { redactAgentBridgeError } from '../services/hermes/agent-bridge/redact'
+import { isDockerContainer } from '../services/runtime-environment'
 
 declare const __APP_VERSION__: string
 
@@ -257,5 +258,6 @@ export async function healthCheck(ctx: any) {
     update_available: updateAvailable,
     node_version: process.versions.node,
     agent_bridge: agentBridge,
+    is_docker: isDockerContainer(),
   }
 }

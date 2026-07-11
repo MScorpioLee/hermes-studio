@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { NButton, NModal, useMessage } from "naive-ui";
+import { NButton, NModal, useMessage, NTag } from "naive-ui";
 import { useAppStore } from "@/stores/hermes/app";
 import { usePersistentRecord } from '@/composables/usePersistentRecord'
 import RouteLinkItem from '@/components/common/RouteLinkItem.vue'
@@ -34,6 +34,8 @@ const versionManagementEnabled = computed(() =>
 );
 const showChangelog = ref(false);
 const showVersionManagement = ref(false);
+const showDockerUpdateTip = ref(false);
+const isDockerRuntime = computed(() => appStore.isDocker);
 const updateButtonText = computed(() => {
   if (appStore.updating) return t('sidebar.updating')
   if (appStore.updateLayer === 'runtime') {
@@ -104,6 +106,18 @@ function openChangelog() {
 
 function openVersionManagement() {
   showVersionManagement.value = true;
+}
+
+function handleDockerUpdateTip() {
+  showDockerUpdateTip.value = true;
+}
+
+function handleUpdateClick() {
+  if (isDockerRuntime.value && !versionManagementEnabled.value) {
+    handleDockerUpdateTip();
+    return;
+  }
+  void handleUpdate();
 }
 </script>
 
@@ -232,6 +246,16 @@ function openVersionManagement() {
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
             <span>{{ t("sidebar.performance") }}</span>
+          </RouteLinkItem>
+          <RouteLinkItem class="nav-item" :to="{ name: 'hermes.journey' }" :active="selectedKey === 'hermes.journey'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5" />
+              <path d="M4.4 15.4c3.2 1.1 7.4.4 10.8-2.1 3.1-2.3 4.9-5.5 4.5-8.1" />
+              <path d="M6.3 6.6c2.5-.9 6.1-.4 9.2 1.5 3.2 2 5.2 5 5 7.6" />
+              <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+              <circle cx="19.5" cy="4.5" r="1.2" fill="currentColor" stroke="none" />
+            </svg>
+            <span>{{ t("sidebar.journey") }}</span>
           </RouteLinkItem>
           <RouteLinkItem class="nav-item" :to="{ name: 'hermes.skillsUsage' }" :active="selectedKey === 'hermes.skillsUsage'">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -362,13 +386,32 @@ function openVersionManagement() {
         </span>
         <ThemeSwitch />
       </div>
-      <NButton v-if="versionManagementEnabled" type="primary" size="tiny" block class="update-btn" @click="openVersionManagement">
-        {{ t('sidebar.versionManagement') }}
+      <NButton
+        v-if="versionManagementEnabled"
+        type="primary"
+        size="tiny"
+        block
+        class="update-btn version-management-btn"
+        :class="{ 'has-update': appStore.updateAvailable }"
+        @click="openVersionManagement"
+      >
+        <span class="version-management-label">
+          {{ t('sidebar.versionManagement') }}
+          <span class="version-update-label">{{ t('sidebar.updateAvailableLabel') }}</span>
+        </span>
       </NButton>
       <NButton v-if="appStore.clientOutdated" type="warning" size="tiny" block class="update-btn" @click="handleReloadClient">
         {{ t('sidebar.reloadClientVersion', { version: appStore.serverVersion }) }}
       </NButton>
-      <NButton v-if="appStore.updateAvailable" type="primary" size="tiny" block class="update-btn" :loading="appStore.updating" @click="handleUpdate">
+      <NButton
+        v-if="appStore.updateAvailable"
+        type="primary"
+        size="tiny"
+        block
+        class="update-btn"
+        :loading="!isDockerRuntime && appStore.updating"
+        @click="handleUpdateClick"
+      >
         {{ updateButtonText }}
       </NButton>
     </div>
@@ -403,6 +446,19 @@ function openVersionManagement() {
       </div>
     </NModal>
     <VersionManagementModal v-if="versionManagementEnabled" v-model:show="showVersionManagement" />
+
+    <NModal v-model:show="showDockerUpdateTip" preset="dialog" :title="t('sidebar.dockerUpdateTitle')" style="width: 480px;">
+      <div class="docker-update-modal">
+        <p>{{ t('sidebar.dockerUpdateGuide') }}</p>
+        <div class="docker-update-commands">
+          <code class="docker-command">docker compose pull</code>
+          <code class="docker-command">docker compose up -d --force-recreate</code>
+        </div>
+        <p class="docker-update-note">
+          <NTag size="small" type="info" :bordered="false">{{ t('sidebar.dockerUpdateNote') }}</NTag>
+        </p>
+      </div>
+    </NModal>
   </aside>
 </template>
 
@@ -662,6 +718,28 @@ function openVersionManagement() {
   border-radius: $radius-sm;
 }
 
+.version-management-btn {
+  .version-management-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .version-update-label {
+    display: none;
+    flex: 0 0 auto;
+    color: inherit;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  &.has-update .version-update-label {
+    display: inline;
+  }
+}
+
 .changelog-list {
   max-height: min(70vh, 640px);
   overflow-y: auto;
@@ -856,4 +934,38 @@ function openVersionManagement() {
     }
   }
 }
+
+.docker-update-modal {
+  p {
+    margin: 12px 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: $text-secondary;
+  }
+
+  .docker-update-commands {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 16px 0;
+  }
+
+  .docker-command {
+    display: block;
+    padding: 10px 14px;
+    background: $code-bg;
+    border-radius: $radius-sm;
+    font-family: $font-code;
+    font-size: 13px;
+    color: $text-primary;
+    user-select: all;
+    cursor: text;
+    border: 1px solid $border-color;
+  }
+
+  .docker-update-note {
+    margin-top: 16px;
+  }
+}
+
 </style>
