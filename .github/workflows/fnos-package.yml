@@ -1,13 +1,6 @@
 name: Build Native fnOS Package
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/fnos-package.yml"
-      - "fnos/**"
-      - "scripts/build-fnos-fpk.mjs"
   workflow_dispatch:
     inputs:
       hermes_version:
