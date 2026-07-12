@@ -40,6 +40,10 @@ jobs:
           npm rebuild node-pty
 
       - name: Build Web UI
+        env:
+          HERMES_WEB_UI_PUBLIC_BASE_PATH: /app/hermes-studio/
+          VITE_HERMES_DISABLE_VERSION_PREVIEW: '1'
+          VITE_HERMES_ENABLE_VERSION_MANAGEMENT: '1'
         run: npm run build
 
       - name: Keep production dependencies only
@@ -86,6 +90,7 @@ jobs:
         with:
           tag_name: ${{ github.event.release.tag_name || github.event.inputs.tag }}
           make_latest: false
+          overwrite_files: true
           fail_on_unmatched_files: true
           files: |
             release/webui/${{ steps.package.outputs.asset }}

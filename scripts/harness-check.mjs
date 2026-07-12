@@ -286,6 +286,15 @@ if (!dockerPublishWorkflow.includes('workflow_dispatch:')) {
 if (!webuiReleaseWorkflow.includes('make_latest: false')) {
   fail('webui-release.yml must not mark release uploads as GitHub latest')
 }
+if (!webuiReleaseWorkflow.includes('overwrite_files: true')) {
+  fail('webui-release.yml must overwrite existing Web UI release assets when rerun')
+}
+if (!webuiReleaseWorkflow.includes('HERMES_WEB_UI_PUBLIC_BASE_PATH: /app/hermes-studio/')) {
+  fail('webui-release.yml must build Web UI artifacts with the fnOS gateway base path')
+}
+if (!webuiReleaseWorkflow.includes("VITE_HERMES_ENABLE_VERSION_MANAGEMENT: '1'")) {
+  fail('webui-release.yml must keep version management enabled in fnOS Web UI artifacts')
+}
 
 if (!electronBuilderConfig.includes('icon: build/icons')) {
   fail('electron-builder.yml must configure the Linux icon set')
