@@ -6,7 +6,7 @@ on:
       hermes_version:
         description: "hermes-agent version to bundle"
         required: false
-        default: "0.17.0"
+        default: "0.18.2"
 
 permissions:
   contents: write
@@ -40,7 +40,7 @@ jobs:
         env:
           TARGET_OS: linux
           TARGET_ARCH: x64
-          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.17.0' }}
+          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.18.2' }}
           HERMES_DESKTOP_NODE_VERSION: 24.15.0
           HERMES_SKIP_BROWSER_RUNTIME: "1"
         run: |
@@ -60,7 +60,7 @@ jobs:
           FNPACK_BIN: /tmp/fnpack
           FNOS_TARGET_OS: linux
           FNOS_TARGET_ARCH: x64
-          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.17.0' }}
+          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.18.2' }}
           HERMES_DESKTOP_NODE_VERSION: 24.15.0
           HERMES_DESKTOP_PYTHON_VERSION: "3.12"
         run: npm run build:fnos
@@ -68,7 +68,7 @@ jobs:
       - name: Create fnOS release metadata
         id: package_meta
         env:
-          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.17.0' }}
+          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.18.2' }}
         shell: bash
         run: |
           set -euo pipefail
