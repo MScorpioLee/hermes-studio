@@ -57,9 +57,9 @@ describe('fnOS package metadata', () => {
     const pkg = readRootJson<{ version: string }>('package.json')
 
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+/)
-    expect(manifest.version).toBe('0.6.37')
+    expect(manifest.version).toBe('0.6.38')
     expect(manifest.version).not.toBe(pkg.version)
-    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.37"')
+    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.38"')
     expect(manifest.platform).toBe('x86')
     expect(manifest.os_min_version).toBe('1.1.3100')
     expect(manifest.install_dep_apps).toBe('')
