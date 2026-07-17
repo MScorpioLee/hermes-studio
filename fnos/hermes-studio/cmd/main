@@ -29,7 +29,7 @@ export_runtime_env() {
     export HERMES_WEB_UI_ENABLE_LOCAL_SHUTDOWN=1
     export HERMES_WEB_UI_PUBLIC_BASE_PATH="/app/hermes-studio"
     export HERMES_WEB_UI_UNIX_SOCKET="${APP_DIR}/hermes-studio.sock"
-    export HERMES_FNOS_NATIVE_VERSION="0.6.39"
+    export HERMES_FNOS_NATIVE_VERSION="0.6.40"
     export HERMES_WEB_UI_UPDATE_MODE=version-managed
     export HERMES_WEB_UI_VERSION_MANIFEST_URL="https://raw.githubusercontent.com/MScorpioLee/hermes-studio/main/fnos/hermes-studio/webui-versions.json"
     export HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO="MScorpioLee/hermes-studio"

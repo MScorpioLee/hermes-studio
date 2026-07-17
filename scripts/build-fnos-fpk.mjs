@@ -1,5 +1,18 @@
 #!/usr/bin/env node
-import { chmod, copyFile, cp, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  copyFile,
+  cp,
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  readlink,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { arch as osArch, platform as osPlatform } from 'node:os'
@@ -200,6 +213,69 @@ async function copyRuntime() {
   await Promise.all([runFile(runtimeNode), runFile(runtimePython), runFile(runtimeHermes), runFile(runtimePythonAlt)])
 }
 
+async function collectSymlinks(dir, symlinks = []) {
+  const entries = await readdir(dir, { withFileTypes: true })
+  for (const entry of entries) {
+    const entryPath = path.join(dir, entry.name)
+    const entryStat = await lstat(entryPath)
+    if (entryStat.isSymbolicLink()) {
+      symlinks.push(entryPath)
+      continue
+    }
+    if (entry.isDirectory()) {
+      await collectSymlinks(entryPath, symlinks)
+    }
+  }
+  return symlinks
+}
+
+async function materializePackageSymlinks(rootDir) {
+  let materialized = 0
+  let removedBroken = 0
+
+  for (let pass = 0; pass < 10; pass += 1) {
+    const symlinks = await collectSymlinks(rootDir)
+    if (symlinks.length === 0) {
+      console.log(`fnOS package symlinks materialized: ${materialized}, removed broken: ${removedBroken}`)
+      return
+    }
+
+    for (const linkPath of symlinks) {
+      const result = await materializeSymlink(linkPath)
+      if (result === 'materialized') materialized += 1
+      if (result === 'removed') removedBroken += 1
+    }
+  }
+
+  const remaining = await collectSymlinks(rootDir)
+  throw new Error(`Unable to materialize all fnOS package symlinks: ${remaining.slice(0, 10).map(file => path.relative(root, file)).join(', ')}`)
+}
+
+async function materializeSymlink(linkPath) {
+  let targetRealPath
+  try {
+    const linkTarget = await readlink(linkPath)
+    targetRealPath = await realpath(path.resolve(path.dirname(linkPath), linkTarget))
+  } catch {
+    await rm(linkPath, { force: true })
+    return 'removed'
+  }
+
+  const targetStat = await stat(targetRealPath)
+  await rm(linkPath, { recursive: true, force: true })
+  await cp(targetRealPath, linkPath, {
+    recursive: targetStat.isDirectory(),
+    force: true,
+    verbatimSymlinks: false,
+  })
+
+  if (targetStat.isFile() && (targetStat.mode & 0o111)) {
+    await chmod(linkPath, targetStat.mode & 0o777)
+  }
+
+  return 'materialized'
+}
+
 async function materializeSymlinkedPythonBinary(dir, binaryName, targetName) {
   const binaryPath = path.join(dir, binaryName)
   if (!existsSync(binaryPath)) return
@@ -277,6 +353,7 @@ await writePatchedManifest()
 await writeRuntimeMetadata()
 await copyServer()
 await copyRuntime()
+await materializePackageSymlinks(stageDir)
 
 run(fnpack, ['build', '--directory', stageDir], { cwd: outputDir })
 

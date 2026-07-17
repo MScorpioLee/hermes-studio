@@ -63,9 +63,9 @@ describe('fnOS package metadata', () => {
     const pkg = readRootJson<{ version: string }>('package.json')
 
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+/)
-    expect(manifest.version).toBe('0.6.39')
+    expect(manifest.version).toBe('0.6.40')
     expect(manifest.version).not.toBe(pkg.version)
-    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.39"')
+    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.40"')
     expect(manifest.platform).toBe('x86')
     expect(manifest.os_min_version).toBe('1.1.3100')
     expect(manifest.install_dep_apps).toBe('')
@@ -151,5 +151,17 @@ describe('fnOS package metadata', () => {
     expect(commonScript).toContain('hermesFnosCompatible')
     expect(commonScript).toContain('apply_active_version_overrides')
     expect(buildScript).toContain('patchBundledHermesVersion')
+  })
+
+  it('materializes symlinks before handing the package to fnpack', () => {
+    const buildScript = readRootFile('scripts', 'build-fnos-fpk.mjs')
+
+    expect(buildScript).toContain('async function materializePackageSymlinks')
+    expect(buildScript).toContain('await materializePackageSymlinks(stageDir)')
+    expect(buildScript).toContain('readlink')
+    expect(buildScript).toContain('realpath')
+    expect(buildScript.indexOf('await materializePackageSymlinks(stageDir)')).toBeLessThan(
+      buildScript.indexOf("run(fnpack, ['build', '--directory', stageDir]"),
+    )
   })
 })
