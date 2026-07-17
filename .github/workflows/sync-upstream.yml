@@ -2,6 +2,8 @@ name: Sync Upstream
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '27 3 * * *'
 
 permissions:
   actions: write
@@ -22,6 +24,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Merge upstream main
         id: sync
         env:
@@ -34,20 +41,109 @@ jobs:
           git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
           git fetch upstream main --no-tags
 
+          changed=false
           if git merge-base --is-ancestor upstream/main HEAD; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
             echo "Fork is already up to date with upstream/main."
+          else
+            git merge --no-edit upstream/main
+            changed=true
+          fi
+
+          version="$(node -p "require('./package.json').version")"
+
+          echo "upstream_changed=${changed}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
+
+      - name: Read upstream runtime releases
+        id: runtime
+        env:
+          UPSTREAM_REPO: EKKOLearnAI/hermes-studio
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_versions_json="$(gh release list --repo "${UPSTREAM_REPO}" --limit 100 --json tagName --jq '[.[].tagName | select(test("^hermes-[0-9]+\\.[0-9]+\\.[0-9]+-runtime$")) | sub("^hermes-"; "") | sub("-runtime$"; "")]')"
+          echo "runtime_versions_json=${runtime_versions_json}" >> "$GITHUB_OUTPUT"
+          echo "Runtime releases: ${runtime_versions_json}"
+
+      - name: Update fnOS version manifest
+        env:
+          WEBUI_VERSION: ${{ steps.sync.outputs.version }}
+          RUNTIME_VERSIONS_JSON: ${{ steps.runtime.outputs.runtime_versions_json }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node .github/scripts/sync-fnos-version-manifest.mjs
+
+      - name: Commit and push sync result
+        id: push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if ! git diff --quiet -- fnos/hermes-studio/webui-versions.json; then
+            git add fnos/hermes-studio/webui-versions.json
+            git commit -m "chore(fnos): refresh Hermes version manifest"
+          fi
+
+          if [ "${{ steps.sync.outputs.upstream_changed }}" = "true" ] || ! git diff --quiet origin/main..HEAD; then
+            git push origin HEAD:main
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create fnOS-compatible Web UI release
+        id: webui_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: EKKOLearnAI/hermes-studio
+          VERSION: ${{ steps.sync.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          asset="hermes-web-ui-${VERSION}.tar.gz"
+
+          if ! gh release view "${tag}" --repo "${UPSTREAM_REPO}" >/dev/null 2>&1; then
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            echo "skipped_reason=upstream release ${tag} not found" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git merge --no-edit upstream/main
-          version="$(node -p "require('./package.json').version")"
-          git push origin HEAD:main
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            assets="$(gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets[].name')"
+            if grep -qx "${asset}" <<< "${assets}"; then
+              echo "created=false" >> "$GITHUB_OUTPUT"
+              echo "skipped_reason=release already has ${asset}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
 
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
+            gh workflow run webui-release.yml --repo "${GITHUB_REPOSITORY}" --ref main -f tag="${tag}"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            echo "skipped_reason=release existed; dispatched webui-release.yml for missing asset" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          gh release create "${tag}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "$(git rev-parse HEAD)" \
+            --title "Hermes Web UI ${tag} (fnOS compatible)" \
+            --notes "fnOS-compatible Web UI artifact for Hermes Studio ${VERSION}. Built with /app/hermes-studio/ base path and version management enabled." \
+            --latest=false
+
+          echo "created=true" >> "$GITHUB_OUTPUT"
+          echo "skipped_reason=" >> "$GITHUB_OUTPUT"
+
+      - name: Purge fnOS version manifest CDN
+        if: steps.push.outputs.pushed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@main/fnos/hermes-studio/webui-versions.json"
 
       - name: Summary
         shell: bash
@@ -55,10 +151,12 @@ jobs:
           {
             echo "## Upstream sync"
             echo ""
-            echo "- Changed: ${{ steps.sync.outputs.changed || 'false' }}"
+            echo "- Upstream changed: ${{ steps.sync.outputs.upstream_changed || 'false' }}"
+            echo "- Pushed: ${{ steps.push.outputs.pushed || 'false' }}"
             echo "- Upstream SHA: ${{ steps.sync.outputs.upstream_sha }}"
-            if [ "${{ steps.sync.outputs.changed || 'false' }}" = "true" ]; then
-              echo "- Synced Web UI version: ${{ steps.sync.outputs.version }}"
-              echo "- fnOS package: not triggered; native shell releases are versioned separately."
-            fi
+            echo "- Synced Web UI version: ${{ steps.sync.outputs.version }}"
+            echo "- Runtime versions: ${{ steps.runtime.outputs.runtime_versions_json }}"
+            echo "- Web UI release created: ${{ steps.webui_release.outputs.created || 'false' }}"
+            echo "- Web UI release note: ${{ steps.webui_release.outputs.skipped_reason }}"
+            echo "- fnOS package: not triggered; native shell releases are versioned separately."
           } >> "$GITHUB_STEP_SUMMARY"
