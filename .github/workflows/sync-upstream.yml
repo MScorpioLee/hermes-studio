@@ -16,7 +16,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Checkout fork
@@ -75,6 +75,31 @@ jobs:
         run: |
           set -euo pipefail
           node .github/scripts/sync-fnos-version-manifest.mjs
+
+      - name: Install dependencies for upstream validation
+        if: steps.sync.outputs.upstream_changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm rebuild node-pty
+
+      - name: Validate upstream sync
+        if: steps.sync.outputs.upstream_changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run harness:check
+          npm run test:coverage
+          npm run build
+
+      - name: Validate upstream sync with Playwright
+        if: steps.sync.outputs.upstream_changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx playwright install --with-deps chromium
+          npx playwright test --workers=1
 
       - name: Commit and push sync result
         id: push
