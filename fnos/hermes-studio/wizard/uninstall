@@ -4,7 +4,7 @@
     "items": [
       {
         "type": "tips",
-        "helpText": "卸载会先停止 Hermes Studio 以及旧的 Web UI、Hermes Agent 和 Bridge 进程，然后移除应用包。建议保留 Hermes Profile、对话、凭证、上传文件、日志和 Web UI 状态；如果选择删除，卸载脚本也会先自动生成一份 appdata 备份。"
+        "helpText": "卸载会先停止 Hermes Studio 以及旧的 Web UI、Hermes Agent 和 Bridge 进程，然后移除应用包。建议保留 Hermes Profile、对话、用户配置、模型配置、凭证、上传文件、日志和 Web UI 状态；如果选择删除，卸载脚本也会先自动生成一份 appdata 备份。"
       },
       {
         "type": "radio",
@@ -13,7 +13,7 @@
         "initValue": "keep",
         "options": [
           {
-            "label": "保留数据和配置",
+            "label": "保留对话、用户配置和模型配置",
             "value": "keep"
           },
           {
