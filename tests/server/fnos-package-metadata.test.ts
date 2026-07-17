@@ -123,6 +123,7 @@ describe('fnOS package metadata', () => {
     expect(buildScript).toContain("VITE_HERMES_ENABLE_VERSION_MANAGEMENT: '1'")
     expect(mainScript).toContain('HERMES_WEB_UI_ENABLE_VERSION_MANAGEMENT=1')
     expect(mainScript).toContain('HERMES_WEB_UI_UPDATE_MODE=version-managed')
+    expect(mainScript).toContain('HERMES_WEB_UI_VERSION_MANIFEST_URL="https://raw.githubusercontent.com/MScorpioLee/hermes-studio/main/fnos/hermes-studio/webui-versions.json"')
     expect(mainScript).toContain('HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO="MScorpioLee/hermes-studio"')
     expect(mainScript).toContain('HERMES_RUNTIME_DOWNLOAD_GITHUB_REPO="EKKOLearnAI/hermes-studio"')
     expect(mainScript).toContain('HERMES_FNOS_CMD_PATH="${SCRIPT_DIR}/main"')
