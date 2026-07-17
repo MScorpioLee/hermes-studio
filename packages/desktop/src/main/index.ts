@@ -1,8 +1,8 @@
-import { app, BrowserWindow, Menu, Tray, shell, ipcMain, nativeImage, Notification, screen, dialog, type MessageBoxOptions } from 'electron'
+import { app, BrowserWindow, Menu, Tray, shell, ipcMain, nativeImage, Notification, screen, dialog, session, systemPreferences, type MessageBoxOptions } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { startWebUiServer, stopWebUiServer, getToken } from './webui-server'
-import { bundledNode, desktopIcon, desktopRuntimeVersion, desktopTrayTemplateIcon, desktopWindowsTrayIcon, hermesBinExists, hermesBin, webuiDir } from './paths'
+import { bundledNode, desktopIcon, desktopMacTrayIcon, desktopRuntimeVersion, desktopWindowsTrayIcon, hermesBinExists, hermesBin, webuiDir } from './paths'
 import { checkForDesktopUpdates, initAutoUpdater } from './updater'
 import { t } from './desktop-i18n'
 import { resetDesktopDefaultLogin } from './desktop-login-reset'
@@ -377,18 +377,18 @@ function updateTrayMenu() {
 function createTray() {
   if (tray) return
   const source = process.platform === 'darwin'
-    ? desktopTrayTemplateIcon()
+    ? desktopMacTrayIcon()
     : process.platform === 'win32'
       ? desktopWindowsTrayIcon()
       : desktopIcon()
-  const icon = nativeImage.createFromPath(source).resize({
-    width: process.platform === 'darwin' ? 18 : process.platform === 'win32' ? 24 : 16,
-    height: process.platform === 'darwin' ? 18 : process.platform === 'win32' ? 24 : 16,
-    quality: 'best',
-  })
-  if (process.platform === 'darwin') {
-    icon.setTemplateImage(true)
-  }
+  const sourceIcon = nativeImage.createFromPath(source)
+  const icon = process.platform === 'darwin'
+    ? sourceIcon
+    : sourceIcon.resize({
+        width: process.platform === 'win32' ? 24 : 16,
+        height: process.platform === 'win32' ? 24 : 16,
+        quality: 'best',
+      })
   tray = new Tray(icon)
   tray.setToolTip('Hermes Studio')
   tray.on('click', () => {
@@ -460,6 +460,44 @@ function createWindow() {
     mainWindow.loadURL(splashHtml(t('runtime.checking')))
   }
   updateTrayMenu()
+}
+
+function installMicrophonePermissionHandler() {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const isMainRenderer = !!mainWindow
+      && !mainWindow.isDestroyed()
+      && webContents === mainWindow.webContents
+    if (permission !== 'media') {
+      callback(isMainRenderer)
+      return
+    }
+
+    const mediaTypes = ('mediaTypes' in details ? details.mediaTypes : undefined) ?? []
+    const requestsAudio = mediaTypes.length ? mediaTypes.includes('audio') : true
+
+    if (!isMainRenderer || !requestsAudio) {
+      callback(false)
+      return
+    }
+
+    if (process.platform !== 'darwin') {
+      callback(true)
+      return
+    }
+
+    const status = systemPreferences.getMediaAccessStatus('microphone')
+    if (status === 'granted') {
+      callback(true)
+      return
+    }
+    if (status === 'denied' || status === 'restricted') {
+      callback(false)
+      return
+    }
+    void systemPreferences.askForMediaAccess('microphone')
+      .then(granted => callback(granted))
+      .catch(() => callback(false))
+  })
 }
 
 function splashHtml(label = t('desktop.startingLocalServices')): string {
@@ -805,6 +843,7 @@ function runDesktopApp() {
     // visual clutter. macOS keeps a menu (system requirement) but Electron's
     // default is fine there.
     if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
+    installMicrophonePermissionHandler()
     if (app.isPackaged) {
       installHermesStudioCliShim({
         nodePath: bundledNode(),

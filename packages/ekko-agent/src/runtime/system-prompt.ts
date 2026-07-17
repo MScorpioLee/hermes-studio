@@ -5,7 +5,10 @@ export interface SystemPromptInput {
   runtimeInstructions?: string[]
   userSystemMessages?: string[]
   skills?: AgentSkill[]
+  memoryContext?: string
   context?: {
+    provider?: string
+    model?: string
     cwd?: string
     workspaceRoot?: string
   }
@@ -21,8 +24,10 @@ export function buildSystemPrompt(input: SystemPromptInput = {}): string {
     sections.push(section('Runtime Instructions', input.runtimeInstructions.filter(Boolean).join('\n')))
   }
 
-  if (input.context?.workspaceRoot || input.context?.cwd) {
+  if (input.context?.provider || input.context?.model || input.context?.workspaceRoot || input.context?.cwd) {
     const lines = [
+      input.context.provider ? `provider: ${input.context.provider}` : '',
+      input.context.model ? `model: ${input.context.model}` : '',
       input.context.workspaceRoot ? `workspaceRoot: ${input.context.workspaceRoot}` : '',
       input.context.cwd ? `cwd: ${input.context.cwd}` : '',
     ].filter(Boolean)
@@ -35,6 +40,10 @@ export function buildSystemPrompt(input: SystemPromptInput = {}): string {
       skill.description ? `Description: ${skill.description}` : '',
       skill.instructions,
     ].filter(Boolean).join('\n')).join('\n\n')))
+  }
+
+  if (input.memoryContext?.trim()) {
+    sections.push(input.memoryContext.trim())
   }
 
   if (input.userSystemMessages?.length) {

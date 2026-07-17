@@ -20,23 +20,22 @@ vi.mock('naive-ui', () => ({
   NDropdown: { template: '<div><slot /></div>' },
   NModal: { template: '<div><slot /><slot name="footer" /></div>' },
   NInputNumber: { template: '<input />' },
-  NPopselect: {
-    props: ['value', 'options'],
+  NPopover: {
+    template: '<div class="n-popover-stub"><slot name="trigger" /><slot /></div>',
+  },
+  NSlider: {
+    props: ['value', 'min', 'max', 'step'],
     emits: ['update:value'],
     template: `
-      <div class="n-popselect-stub">
-        <slot />
-        <button
-          v-for="option in options"
-          :key="option.value"
-          type="button"
-          class="n-popselect-option"
-          :data-value="option.value"
-          @click="$emit('update:value', option.value)"
-        >
-          {{ option.label }}
-        </button>
-      </div>
+      <input
+        class="n-slider-stub"
+        type="range"
+        :value="value"
+        :min="min"
+        :max="max"
+        :step="step"
+        @input="$emit('update:value', Number($event.target.value))"
+      />
     `,
   },
   useMessage: () => ({ error: vi.fn(), success: vi.fn() }),
@@ -119,6 +118,27 @@ describe('ChatInput draft persistence', () => {
     expect((remountedA.get('textarea').element as HTMLTextAreaElement).value).toBe('draft for session a')
   })
 
+  it('shows and cancels the active session message reference', async () => {
+    const wrapper = mountForSession('session-reference')
+    const chatStore = useChatStore()
+
+    chatStore.setMessageReference('session-reference', {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: 'A referenced assistant response',
+    })
+    await nextTick()
+
+    expect(wrapper.get('.message-reference-preview').text()).toContain('A referenced assistant response')
+    expect(wrapper.get('.message-reference-preview').element.parentElement?.classList.contains('input-wrapper')).toBe(false)
+    expect(chatStore.activeMessageReference?.id).toBe('assistant-1')
+
+    await wrapper.get('.message-reference-remove').trigger('click')
+
+    expect(wrapper.find('.message-reference-preview').exists()).toBe(false)
+    expect(chatStore.activeMessageReference).toBeNull()
+  })
+
   it('applies the configured desktop input height from display settings', async () => {
     const wrapper = mountForSession('session-a', {}, { chat_input_height: 180 })
     await flushPromises()
@@ -178,19 +198,46 @@ describe('ChatInput draft persistence', () => {
     })
     await nextTick()
 
-    expect(wrapper.find('.n-popselect-stub').exists()).toBe(true)
-    expect(wrapper.find('[data-value="high"]').exists()).toBe(true)
+    expect(wrapper.find('.n-popover-stub').exists()).toBe(true)
+    expect(wrapper.find('.n-slider-stub').exists()).toBe(true)
+    expect(wrapper.get('.n-slider-stub').attributes('min')).toBe('0')
+    expect(wrapper.get('.n-slider-stub').attributes('max')).toBe('7')
+  })
+
+  it('hides the reasoning effort selector for MoA sessions', async () => {
+    const wrapper = mountForSession('session-moa', {
+      provider: 'moa',
+      model: 'research-team',
+    })
+    await nextTick()
+
+    expect(wrapper.find('.n-popover-stub').exists()).toBe(false)
+  })
+
+  it('stores maximum reasoning effort for the active session', async () => {
+    const wrapper = mountForSession('session-reasoning-max')
+    const store = useChatStore()
+
+    await wrapper.get('.n-slider-stub').setValue('7')
+    await nextTick()
+
+    expect(store.sessions[0].reasoningEffort).toBe('max')
+    expect(localStorage.getItem('hermes:reasoning_effort:session-reasoning-max')).toBe('max')
+    expect(wrapper.get('.reasoning-effort-button').attributes('style')).toContain('--reasoning-effort-accent-color: #ef4444')
+    expect(wrapper.get('.n-slider-stub').classes()).toContain('reasoning-effort-slider--max')
   })
 
   it('stores the selected reasoning effort for the active session', async () => {
     const wrapper = mountForSession('session-reasoning')
     const store = useChatStore()
 
-    await wrapper.get('[data-value="high"]').trigger('click')
+    await wrapper.get('.n-slider-stub').setValue('5')
     await nextTick()
 
     expect(store.sessions[0].reasoningEffort).toBe('high')
     expect(localStorage.getItem('hermes:reasoning_effort:session-reasoning')).toBe('high')
+    expect(wrapper.get('.reasoning-effort-button').attributes('style')).toContain('--reasoning-effort-accent-color: #f9c33c')
+    expect(wrapper.get('.n-slider-stub').classes()).not.toContain('reasoning-effort-slider--max')
   })
 
   it('opens the skill picker from /skill and inserts the selected skill command', async () => {

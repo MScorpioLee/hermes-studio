@@ -1,5 +1,5 @@
 import type { Server, Socket } from 'socket.io'
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { inspect } from 'util'
 import {
   createModelClient,
@@ -15,6 +15,7 @@ import {
 } from '../../../../../ekko-agent/src'
 import { getGlobalEkkoAgent } from '../../ekko-agent/manager'
 import { resolveEkkoMcpServers } from '../../ekko-agent/mcp'
+import { resolveEkkoAuthorizedProviderCredentials } from '../../ekko-agent/auth-providers'
 import { createSession, addMessage, getSession, updateSession, updateSessionStats } from '../../../db/hermes/session-store'
 import { logger } from '../../logger'
 import { recordSessionUsage } from '../../usage-recorder'
@@ -486,9 +487,13 @@ export async function handleEkkoAgentRun(
     })
   }
 
-  const baseUrl = data.baseUrl || data.base_url || ''
+  const authorizedCredentials = await resolveEkkoAuthorizedProviderCredentials(
+    profile,
+    modelConfig.provider,
+  )
+  const baseUrl = data.baseUrl || data.base_url || authorizedCredentials.baseUrl || ''
   const apiMode = data.apiMode || data.api_mode
-  const apiKey = data.apiKey || data.api_key || undefined
+  const apiKey = data.apiKey || data.api_key || authorizedCredentials.apiKey
   const { providerConfig, fallbackProviderConfig } = resolveModelProviderConfigs({
     provider: modelConfig.provider,
     baseUrl,
@@ -509,6 +514,7 @@ export async function handleEkkoAgentRun(
       : undefined,
   })
   const agent = getGlobalEkkoAgent()
+  const memoryUsageBatchId = randomUUID()
 
   let assistantText = ''
   let assistantReasoning = ''
@@ -618,6 +624,7 @@ export async function handleEkkoAgentRun(
 
   try {
     logger.info('[chat-run-socket] starting ekko-agent run for session %s', sessionId)
+    const authenticatedUserId = socket.data?.user?.id == null ? undefined : String(socket.data.user.id)
     const result = await agent.run({
       modelClient,
       model: modelConfig.model,
@@ -627,9 +634,27 @@ export async function handleEkkoAgentRun(
       messages: toAgentMessages(state.messages),
       signal: abortController.signal,
       onEvent: handleRuntimeEvent,
+      onMemoryUsage: event => {
+        recordSessionUsage({
+          sessionId,
+          runId: `memory-summary:${memoryUsageBatchId}:call:${event.callIndex}`,
+          source: 'ekko_agent',
+          agent: 'ekko_agent',
+          usageScope: 'model_call',
+          purpose: event.purpose,
+          apiCalls: 1,
+          usage: event.usage,
+          profile,
+          model: event.model || modelConfig.model,
+          provider: modelConfig.provider,
+          isEstimated: false,
+        })
+      },
       toolContext: {
         cwd: workspace,
         workspaceRoot: workspace,
+        workspaceId: workspace,
+        userId: authenticatedUserId,
         sessionId,
         browserSessionId: sessionId,
         mcpServers,
@@ -638,6 +663,8 @@ export async function handleEkkoAgentRun(
       },
       metadata: {
         session_id: sessionId,
+        workspace_id: workspace,
+        user_id: authenticatedUserId,
         profile,
       },
     })

@@ -18,6 +18,22 @@
 - 第一版不让模型直接修改不可追溯的全局记忆。
 - 第一版不把所有历史总结成一个不可审计的大摘要。
 
+## 第一版实现约束
+
+- Ekko Agent 自主管理 SQLite 数据库，不复用 server 的业务数据库。
+- 生产数据目录固定在 `HERMES_WEB_UI_HOME/ekko`，默认是 `~/.hermes-web-ui/ekko`；开发环境使用 `packages/ekko-agent/sql-data`，便于通过 Navicat 直接查看。
+- 数据库使用通用名称 `ekko.db`，不命名为 `memory.db`，便于后续容纳 Ekko Agent 的其他持久化组件。
+- `src/database.ts` 专门管理目录创建、连接、事务和按组件版本迁移；记忆模块通过 `SqliteMemoryStore` 使用数据库。
+- 数据库初始化失败时，记忆能力降级关闭，但不能阻断 Agent 正常回复。
+- 正常对话完成后始终保存原始消息，但不每轮调用模型；默认累计 8 条新的用户消息后，复用当前会话所选模型运行一次独立的记忆整理。手动整理可绕过阈值，供后续会话结束或空闲触发使用。
+- 记忆整理调用只注册四个记忆工具，不注入文件、终端、浏览器、MCP、skills 或主 Agent 系统提示词。
+- 记忆整理模型只读取上一份滚动摘要和上次整理后的新增消息；上一份摘要最多 4,000 字符，新增消息最多 12,000 字符，优先保留最新内容。
+- 原始工具结果不进入记忆整理模型的 transcript；天气、新闻、榜单和网页抓取等一次性结果在请求完成后不保留到滚动摘要。
+- 模型通过记忆工具写入结构化长期记忆，并输出 JSON 格式的滚动会话状态；服务端校验活动目标、过滤时效性指标和未经用户确认的强化表述，再根据结构化字段生成最多 500 字符的摘要。模型请求默认重试 3 次，无效 JSON 额外修复 1 次；全部失败后生成紧凑安全摘要并在审核事件中记录回退原因，不能影响主 Agent 已完成的回复。
+- 每次周期性摘要模型响应以 `purpose = ekko-memory-summary` 单独写入会话 usage 表，计入实际模型调用和 token 开销，但不与主回答的 `model.usage` 重复记录。
+- 模型直接返回并持久化 `constraints`、`preferences`、`decisions`、`completedWork`、`pendingWork` 和 `knownIssues`；当 `pendingWork` 与 `knownIssues` 都为空时服务端强制清空 `currentGoal`。正则分类只用于模型提取失败时的降级路径。
+- 无服务端 ID 的消息按 `session + role + content + metadata + 同内容出现序号` 生成稳定 ID，历史中插入其他消息不会导致整段对话被重复采集。
+
 ## 记忆分层
 
 ### 1. 原始消息日志
@@ -179,10 +195,12 @@ memory_embeddings
 ```txt
 读取上一条 MemorySummary
 读取本轮新增 MemoryMessage
-调用 memory extractor
-得到 MemoryExtraction
-按 operation 写入 MemoryNode
-必要时 append MemorySummary
+调用独立的 model memory extractor
+  -> 仅提供 memory_search / memory_get / memory_propose_update / memory_forget
+  -> 模型按需写入 MemoryNode
+  -> 模型返回滚动 summary JSON
+每个成功 turn append MemorySummary
+失败时回退到 rule-based extractor
 ```
 
 写入规则：
@@ -694,20 +712,22 @@ status = active
 
 ### 文件位置
 
-建议根据记忆 scope 分开落盘：
+第一版统一存放在 Web UI 状态目录：
 
 ```txt
-workspace scope: <workspace>/.ekko/memory.db
-user scope:      ~/.ekko/memory.db
-session scope:   可以存入 workspace db，也可以存入服务端会话库
-global scope:    随包发布的只读 seed 数据，或服务端同步
+packages/ekko-agent/sql-data/ekko-agent.db  # development
+HERMES_WEB_UI_HOME/ekko/ekko.db             # production
 ```
 
-如果第一版只做 workspace 本地记忆，可以先统一使用：
+没有配置状态目录时，默认路径是：
 
 ```txt
-<workspace>/.ekko/memory.db
+~/.hermes-web-ui/ekko/ekko.db
 ```
+
+scope 通过表字段隔离，不按 workspace 或 user 拆分数据库文件。开发环境的
+`ekko-agent.db` 与生产环境的 `ekko.db` 都是 Ekko Agent 的通用数据库，
+由 `src/database.ts` 统一管理连接、事务和组件迁移。
 
 ### 表结构
 
@@ -1267,8 +1287,7 @@ packages/ekko-agent/src/memory/
 
 ## 开放问题
 
-- 记忆存储落在哪里：服务端数据库、workspace 文件，还是用户级 profile。
 - 哪些记忆需要用户可见和可编辑。
-- 是否允许 agent 自动写入 user-scope 长期记忆。
+- 除明确用户意图外，是否允许模型抽取器自动写入更多 user-scope 长期记忆。
 - 记忆抽取使用哪个模型和预算。
 - 是否需要多租户隔离和加密。
