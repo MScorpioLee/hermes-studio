@@ -4,7 +4,7 @@
   "bundled": {
     "node": "24.15.0",
     "python": "3.12",
-    "hermesAgent": "0.17.0"
+    "hermesAgent": "0.18.2"
   },
   "dependencies": {
     "install_dep_apps": [],

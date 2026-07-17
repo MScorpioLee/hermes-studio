@@ -1,22 +1,5 @@
 {
   "data-share": {
-    "shares": [
-      {
-        "name": "hermes-studio",
-        "permission": {
-          "rw": [
-            "hermes-studio"
-          ]
-        }
-      },
-      {
-        "name": "hermes-studio/data",
-        "permission": {
-          "rw": [
-            "hermes-studio"
-          ]
-        }
-      }
-    ]
+    "shares": []
   }
 }

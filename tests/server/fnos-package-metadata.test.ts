@@ -47,9 +47,15 @@ describe('fnOS package metadata', () => {
     expect(privilege.groupname).toBe('hermes-studio')
     expect(runtime.bundled.node).toBe('24.15.0')
     expect(runtime.bundled.python).toBe('3.12')
-    expect(runtime.bundled.hermesAgent).toBe('0.17.0')
+    expect(runtime.bundled.hermesAgent).toBe('0.18.2')
     expect(runtime.dependencies.install_dep_apps).toEqual([])
     expect(runtime.dependencies.middleware).toEqual([])
+  })
+
+  it('does not declare fnOS shared data directories for internal app state', () => {
+    const resource = readFnOsJson<{ 'data-share'?: { shares?: Array<{ name: string; permission?: unknown }> } }>('config', 'resource')
+
+    expect(resource['data-share']?.shares || []).toEqual([])
   })
 
   it('keeps the native manifest version separate from the Web UI package version', () => {
@@ -57,9 +63,9 @@ describe('fnOS package metadata', () => {
     const pkg = readRootJson<{ version: string }>('package.json')
 
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+/)
-    expect(manifest.version).toBe('0.6.38')
+    expect(manifest.version).toBe('0.6.39')
     expect(manifest.version).not.toBe(pkg.version)
-    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.38"')
+    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.39"')
     expect(manifest.platform).toBe('x86')
     expect(manifest.os_min_version).toBe('1.1.3100')
     expect(manifest.install_dep_apps).toBe('')
@@ -134,7 +140,7 @@ describe('fnOS package metadata', () => {
     expect(mainScript).toContain('HERMES_AGENT_NODE_ROOT="$NODE_ROOT"')
     expect(mainScript).toContain('PATH="${NODE_ROOT}/bin:${PYTHON_HOME}/bin:${PATH}"')
 
-    expect(commonScript).toContain('RUNTIME_VERSION_VALUE="0.17.0"')
+    expect(commonScript).toContain('RUNTIME_VERSION_VALUE="0.18.2"')
     expect(commonScript).toContain('ACTIVE_VERSION_FILE="${VAR_DIR}/hermes-web-ui/desktop-runtime/active-version.json"')
     expect(commonScript).toContain('read_active_version_field')
     expect(commonScript).toContain('runtimeDirectory')

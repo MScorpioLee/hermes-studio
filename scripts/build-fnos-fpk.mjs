@@ -14,7 +14,7 @@ const packageName = 'hermes-studio'
 const targetOS = process.env.FNOS_TARGET_OS?.trim() || 'linux'
 const targetArch = process.env.FNOS_TARGET_ARCH?.trim() || 'x64'
 const fnpack = process.env.FNPACK_BIN?.trim() || 'fnpack'
-const bundledHermesVersion = process.env.HERMES_VERSION?.trim() || '0.17.0'
+const bundledHermesVersion = process.env.HERMES_VERSION?.trim() || '0.18.2'
 const bundledNodeVersion = process.env.HERMES_DESKTOP_NODE_VERSION?.trim() || '24.15.0'
 const bundledPythonVersion = process.env.HERMES_DESKTOP_PYTHON_VERSION?.trim() || '3.12'
 
