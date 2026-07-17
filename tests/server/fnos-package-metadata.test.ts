@@ -63,9 +63,9 @@ describe('fnOS package metadata', () => {
     const pkg = readRootJson<{ version: string }>('package.json')
 
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+/)
-    expect(manifest.version).toBe('0.6.40')
+    expect(manifest.version).toBe('0.6.41')
     expect(manifest.version).not.toBe(pkg.version)
-    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.40"')
+    expect(readFnOsFile('cmd', 'main')).toContain('HERMES_FNOS_NATIVE_VERSION="0.6.41"')
     expect(manifest.platform).toBe('x86')
     expect(manifest.os_min_version).toBe('1.1.3100')
     expect(manifest.install_dep_apps).toBe('')
@@ -88,8 +88,22 @@ describe('fnOS package metadata', () => {
     expect(readFnOsFile('wizard', 'upgrade')).toContain('更新前会停止旧的 Web UI、Hermes Agent 和 Bridge 进程')
     expect(readFnOsFile('wizard', 'config')).toContain('保存后会按新端口重启服务')
     expect(readFnOsFile('wizard', 'uninstall')).toContain('"label": "保留数据和配置"')
+    expect(readFnOsFile('wizard', 'uninstall')).toContain('删除前自动备份')
     expect(combined).not.toMatch(/"stepTitle":\s*"(Install|Upgrade|Config|Uninstall)"/)
     expect(combined).not.toContain('Please enter the Web UI port.')
+  })
+
+  it('backs up appdata before destructive uninstall cleanup', () => {
+    const commonScript = readFnOsFile('cmd', 'common')
+    const uninstallScript = readFnOsFile('cmd', 'uninstall_callback')
+
+    expect(commonScript).toContain('backup_package_data_dir()')
+    expect(commonScript).toContain('backup-before-uninstall')
+    expect(commonScript).toContain('tar -czf "$backup_name" "$backup_base"')
+    expect(uninstallScript).toContain('backup_package_data_dir || exit 1')
+    expect(uninstallScript.indexOf('backup_package_data_dir || exit 1')).toBeLessThan(
+      uninstallScript.indexOf('safe_clean_dir_contents "${TRIM_PKGVAR:-}"'),
+    )
   })
 
   it('registers a fnOS unified gateway entry backed by the packaged Unix socket', () => {

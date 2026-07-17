@@ -7,6 +7,7 @@ stop_all_processes
 
 case "${wizard_keep_data:-keep}" in
 delete|remove|false|no)
+    backup_package_data_dir || exit 1
     safe_clean_dir_contents "${TRIM_PKGVAR:-}"
     safe_clean_dir_contents "${TRIM_PKGHOME:-}"
     safe_clean_dir_contents "${TRIM_PKGETC:-}"

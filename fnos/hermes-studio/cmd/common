@@ -484,6 +484,34 @@ safe_clean_dir_contents() {
     fi
 }
 
+backup_package_data_dir() {
+    local source_dir backup_parent backup_base backup_name backup_path
+    source_dir="${TRIM_PKGVAR:-}"
+    [ -n "$source_dir" ] && [ "$source_dir" != "/" ] && [ -d "$source_dir" ] || return 0
+
+    backup_parent="$(dirname "$source_dir")"
+    backup_base="$(basename "$source_dir")"
+    backup_name="${backup_base}.backup-before-uninstall-$(date +%Y%m%d%H%M%S).tgz"
+    backup_path="${backup_parent}/${backup_name}"
+
+    if [ -z "$backup_parent" ] || [ "$backup_parent" = "/" ]; then
+        write_error "Refusing to create Hermes Studio data backup outside an appdata parent directory: $source_dir"
+        return 1
+    fi
+
+    if ! command -v tar >/dev/null 2>&1; then
+        write_error "tar is required to back up Hermes Studio data before deletion"
+        return 1
+    fi
+
+    if ! (cd "$backup_parent" && tar -czf "$backup_name" "$backup_base"); then
+        write_error "Failed to create Hermes Studio data backup: $backup_path"
+        return 1
+    fi
+
+    echo "Hermes Studio data backup: $backup_path"
+}
+
 clean_data_share_paths() {
     local old_ifs path
     [ -n "${TRIM_DATA_SHARE_PATHS:-}" ] || return 0
