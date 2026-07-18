@@ -21,6 +21,28 @@ function hasPackagedPublicBasePath(): boolean {
   return !!DEFAULT_BASE_URL && !/^https?:\/\//i.test(DEFAULT_BASE_URL)
 }
 
+function fnosGatewayCompatEnabled(): boolean {
+  const explicit = String(import.meta.env.VITE_HERMES_FNOS_GATEWAY_COMPAT || '').trim().toLowerCase()
+  if (['0', 'false', 'no', 'off'].includes(explicit)) return false
+  if (['1', 'true', 'yes', 'on'].includes(explicit)) return true
+  return false
+}
+
+function directWebSocketPortValue(directPort?: string | number): number | null {
+  const raw = String(localStorage.getItem('hermes_direct_ws_port') || directPort || '').trim()
+  if (!raw) return null
+  const port = Number(raw)
+  return Number.isInteger(port) && port > 0 && port < 65536 ? port : null
+}
+
+function shouldUseDirectWebSocketPort(directPort?: string | number): boolean {
+  const port = directWebSocketPortValue(directPort)
+  if (!port) return false
+  if (import.meta.env.DEV) return true
+  if (!fnosGatewayCompatEnabled() || !hasPackagedPublicBasePath()) return false
+  return typeof window !== 'undefined' && window.location.protocol !== 'https:'
+}
+
 async function ensureDesktopAuthReady(): Promise<void> {
   if (typeof window === 'undefined' || getApiKey()) return
   const bridge = (window as typeof window & {
@@ -269,11 +291,20 @@ export function getSocketIoConnectionBaseUrl(): string {
 }
 
 export function getSocketIoTransportsValue(): Array<'polling' | 'websocket'> {
+  if (fnosGatewayCompatEnabled() && hasPackagedPublicBasePath()) {
+    return ['polling']
+  }
   return ['polling', 'websocket']
 }
 
 export function buildWebSocketUrl(path: string, directDevPort?: string | number): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  if (shouldUseDirectWebSocketPort(directDevPort)) {
+    const port = directWebSocketPortValue(directDevPort)
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${wsProtocol}//${formatHostForPort(location.hostname, Number(port))}${normalizedPath}`
+  }
+
   const base = getBaseUrl()
   if (base) {
     const baseUrl = new URL(base, currentOrigin())

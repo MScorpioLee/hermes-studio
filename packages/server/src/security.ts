@@ -22,6 +22,55 @@ function normalizeHost(host: string | undefined | null): string {
   return String(host || '').trim().toLowerCase()
 }
 
+function hostnameFromHostHeader(host: string | undefined | null): string {
+  const requestHost = normalizeHost(host)
+  if (!requestHost) return ''
+  try {
+    return new URL(`http://${requestHost}`).hostname.toLowerCase()
+  } catch {
+    return requestHost.replace(/^\[/, '').replace(/\]$/, '').split(':')[0]?.toLowerCase() || ''
+  }
+}
+
+function envFlagAllows(value: string | undefined | null): boolean | null {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!normalized) return null
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+  return null
+}
+
+function parseIpv4Address(hostname: string): number[] | null {
+  const parts = hostname.split('.')
+  if (parts.length !== 4) return null
+  const octets = parts.map(part => Number(part))
+  if (octets.some((octet, index) => !Number.isInteger(octet) || octet < 0 || octet > 255 || String(octet) !== parts[index])) {
+    return null
+  }
+  return octets
+}
+
+function isLanOrLocalHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase().replace(/^\[/, '').replace(/\]$/, '')
+  if (!normalized) return false
+  if (normalized === 'localhost' || normalized.endsWith('.local')) return true
+
+  const ipv4 = parseIpv4Address(normalized)
+  if (ipv4) {
+    const [a, b] = ipv4
+    return a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168)
+  }
+
+  return normalized === '::1' ||
+    normalized.startsWith('fe80:') ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd')
+}
+
 function parseCorsPolicy(corsOrigins: string | undefined): CorsPolicy {
   const value = String(corsOrigins || '').trim()
   if (!value) return { allowAll: false, allowedOrigins: new Set() }
@@ -48,6 +97,31 @@ function isSameHostOrigin(origin: string, host: string): boolean {
   }
 }
 
+function isSameHostnameOrigin(origin: string, host: string): boolean {
+  if (!isFnosGatewayOriginCompatEnabled()) return false
+  const requestHostname = hostnameFromHostHeader(host)
+  if (!requestHostname) return false
+  try {
+    const parsed = new URL(origin)
+    return parsed.hostname.toLowerCase() === requestHostname
+  } catch {
+    return false
+  }
+}
+
+function isLanOriginCompatible(origin: string, host: string): boolean {
+  if (!isFnosGatewayOriginCompatEnabled() || !isFnosLanOriginCompatEnabled()) return false
+  try {
+    const parsed = new URL(origin)
+    if (!isLanOrLocalHostname(parsed.hostname)) return false
+  } catch {
+    return false
+  }
+
+  const requestHostname = hostnameFromHostHeader(host)
+  return requestHostname ? isLanOrLocalHostname(requestHostname) : true
+}
+
 export function isOriginAllowed(origin: string | undefined | null, host: string | undefined | null, corsOrigins = ''): boolean {
   const originValue = String(origin || '').trim()
   if (!originValue) return true
@@ -58,7 +132,10 @@ export function isOriginAllowed(origin: string | undefined | null, host: string 
 
   if (policy.allowAll) return true
   if (policy.allowedOrigins.has(normalizedOrigin)) return true
-  return isSameHostOrigin(normalizedOrigin, String(host || ''))
+  const requestHost = String(host || '')
+  return isSameHostOrigin(normalizedOrigin, requestHost) ||
+    isSameHostnameOrigin(normalizedOrigin, requestHost) ||
+    isLanOriginCompatible(normalizedOrigin, requestHost)
 }
 
 export function createCorsOriginResolver(corsOrigins = '') {
@@ -100,6 +177,18 @@ function isHttpsRequest(ctx: Context): boolean {
 function isEmbeddedGatewayMode(): boolean {
   const publicBasePath = String(process.env.HERMES_WEB_UI_PUBLIC_BASE_PATH || '').trim()
   return !!publicBasePath && publicBasePath !== '/'
+}
+
+function isFnosGatewayOriginCompatEnabled(): boolean {
+  const explicit = envFlagAllows(process.env.HERMES_FNOS_GATEWAY_ORIGIN_COMPAT)
+  if (explicit != null) return explicit
+  return isEmbeddedGatewayMode()
+}
+
+function isFnosLanOriginCompatEnabled(): boolean {
+  const explicit = envFlagAllows(process.env.HERMES_FNOS_LAN_ORIGIN_COMPAT)
+  if (explicit != null) return explicit
+  return true
 }
 
 export function securityHeaders(): Middleware {

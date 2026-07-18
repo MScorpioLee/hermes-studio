@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getActiveProfileName, getApiKey, getStoredUsername } from '@/api/client'
+import { getActiveProfileName, getApiKey, getStoredUsername, getBaseUrlValue } from '@/api/client'
 import { fetchCurrentUser } from '@/api/auth'
 import { getDownloadUrl } from '@/api/hermes/download'
 import { responseErrorMessage } from '@/utils/http-error'
@@ -40,7 +40,7 @@ async function uploadGroupFiles(attachments: Attachment[]): Promise<{ name: stri
     const headers: Record<string, string> = {}
     if (token) headers.Authorization = `Bearer ${token}`
     if (profileName) headers['X-Hermes-Profile'] = profileName
-    const res = await fetch('/upload', {
+    const res = await fetch(`${getBaseUrlValue()}/upload`, {
         method: 'POST',
         body: formData,
         headers,

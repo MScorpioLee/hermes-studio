@@ -297,6 +297,12 @@ if (!webuiReleaseWorkflow.includes('HERMES_WEB_UI_PUBLIC_BASE_PATH: /app/hermes-
 if (!webuiReleaseWorkflow.includes("VITE_HERMES_ENABLE_VERSION_MANAGEMENT: '1'")) {
   fail('webui-release.yml must keep version management enabled in fnOS Web UI artifacts')
 }
+if (!webuiReleaseWorkflow.includes("VITE_HERMES_FNOS_GATEWAY_COMPAT: '1'")) {
+  fail('webui-release.yml must keep fnOS gateway WebSocket compatibility enabled')
+}
+if (!webuiReleaseWorkflow.includes("VITE_HERMES_DIRECT_WS_PORT: '6060'")) {
+  fail('webui-release.yml must keep the fnOS direct WebSocket fallback port configured')
+}
 
 if (!electronBuilderConfig.includes('icon: build/icons')) {
   fail('electron-builder.yml must configure the Linux icon set')

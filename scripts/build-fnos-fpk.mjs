@@ -156,6 +156,8 @@ async function buildWebUi() {
       HERMES_WEB_UI_PUBLIC_BASE_PATH: '/app/hermes-studio/',
       VITE_HERMES_DISABLE_VERSION_PREVIEW: '1',
       VITE_HERMES_ENABLE_VERSION_MANAGEMENT: '1',
+      VITE_HERMES_FNOS_GATEWAY_COMPAT: '1',
+      VITE_HERMES_DIRECT_WS_PORT: '6060',
     },
   })
 }
