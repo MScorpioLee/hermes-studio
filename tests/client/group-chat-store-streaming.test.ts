@@ -43,6 +43,7 @@ const groupChatApiMock = vi.hoisted(() => {
 const clientApiMock = vi.hoisted(() => ({
   getApiKey: vi.fn(() => 'test-token'),
   getActiveProfileName: vi.fn(() => 'research'),
+  getBaseUrlValue: vi.fn(() => '/app/hermes-studio'),
   getStoredUsername: vi.fn(() => null),
 }))
 const authApiMock = vi.hoisted(() => ({
@@ -110,6 +111,7 @@ describe('group chat store streaming merge', () => {
     groupChatApiMock.getStoredUserName.mockReturnValue('tester')
     clientApiMock.getApiKey.mockReturnValue('test-token')
     clientApiMock.getActiveProfileName.mockReturnValue('research')
+    clientApiMock.getBaseUrlValue.mockReturnValue('/app/hermes-studio')
     clientApiMock.getStoredUsername.mockReturnValue(null)
     authApiMock.fetchCurrentUser.mockRejectedValue(new Error('not signed in'))
     fetchMock.mockReset()
@@ -480,7 +482,7 @@ describe('group chat store streaming merge', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, options] = fetchMock.mock.calls[0]
-    expect(url).toBe('/upload')
+    expect(url).toBe('/app/hermes-studio/upload')
     expect(options.method).toBe('POST')
     expect(options.headers.Authorization).toBe('Bearer test-token')
     expect(options.headers['X-Hermes-Profile']).toBe('research')
