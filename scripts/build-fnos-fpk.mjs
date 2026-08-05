@@ -191,26 +191,26 @@ async function copyRuntime() {
   const runtimeDir = path.join(stageDir, 'app', 'runtime')
   const nodeDir = path.join(root, 'packages', 'desktop', 'resources', 'node', platformLabel)
   const pythonDir = path.join(root, 'packages', 'desktop', 'resources', 'python', platformLabel)
+  const pythonVenvDir = path.join(pythonDir, 'venv')
 
   ensureFile(path.join(nodeDir, 'bin', 'node'))
-  ensureFile(path.join(pythonDir, 'bin', 'python3'))
-  ensureFile(path.join(pythonDir, 'bin', 'hermes'))
-  ensureFile(path.join(pythonDir, 'run_agent.py'))
+  ensureFile(path.join(pythonVenvDir, 'bin', 'python3'))
+  ensureFile(path.join(pythonVenvDir, 'bin', 'hermes'))
+  ensureFile(path.join(pythonDir, 'pyproject.toml'))
 
   await rm(runtimeDir, { recursive: true, force: true })
   await mkdir(runtimeDir, { recursive: true })
   await cp(nodeDir, path.join(runtimeDir, 'node'), { recursive: true, verbatimSymlinks: true })
   await cp(pythonDir, path.join(runtimeDir, 'python'), { recursive: true, verbatimSymlinks: false })
 
-  const stagePythonBin = path.join(runtimeDir, 'python', 'bin')
+  const stagePythonBin = path.join(runtimeDir, 'python', 'venv', 'bin')
   await materializeSymlinkedPythonBinary(stagePythonBin, 'python3', 'python3.12')
   await materializeSymlinkedPythonBinary(stagePythonBin, 'python', 'python3.12')
-  await materializeRunAgentEntrypoint(path.join(runtimeDir, 'python'))
 
   const runtimeNode = path.join(runtimeDir, 'node', 'bin', 'node')
-  const runtimePython = path.join(runtimeDir, 'python', 'bin', 'python3')
-  const runtimeHermes = path.join(runtimeDir, 'python', 'bin', 'hermes')
-  const runtimePythonAlt = path.join(runtimeDir, 'python', 'bin', 'python')
+  const runtimePython = path.join(runtimeDir, 'python', 'venv', 'bin', 'python3')
+  const runtimeHermes = path.join(runtimeDir, 'python', 'venv', 'bin', 'hermes')
+  const runtimePythonAlt = path.join(runtimeDir, 'python', 'venv', 'bin', 'python')
 
   await Promise.all([runFile(runtimeNode), runFile(runtimePython), runFile(runtimeHermes), runFile(runtimePythonAlt)])
 }

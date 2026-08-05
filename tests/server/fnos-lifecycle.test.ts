@@ -183,4 +183,32 @@ describe('fnOS lifecycle scripts', { timeout: 15_000 }, () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it('uses the python venv from a schema 2 bundled runtime', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hermes-fnos-bundled-runtime-'))
+    const appDir = join(dir, 'app')
+    const pythonSourceRoot = join(appDir, 'runtime', 'python')
+    const pythonHome = join(pythonSourceRoot, 'venv')
+    mkdirSync(join(pythonHome, 'bin'), { recursive: true })
+    mkdirSync(join(appDir, 'runtime', 'node', 'bin'), { recursive: true })
+    writeFileSync(join(pythonHome, 'bin', 'python3'), '')
+    writeFileSync(join(pythonHome, 'bin', 'hermes'), '')
+    writeFileSync(join(appDir, 'runtime', 'node', 'bin', 'node'), '')
+
+    try {
+      const output = execFileSync('bash', ['-lc', [
+        'set -e',
+        `TRIM_APPDEST=${shellQuote(appDir)}`,
+        `source ${shellQuote(join(root, 'fnos', 'hermes-studio', 'cmd', 'common'))}`,
+        'printf "PYTHON_SOURCE_ROOT=%s\\nPYTHON_HOME=%s\\nPYTHON_BIN=%s\\nHERMES_BIN=%s\\n" "$PYTHON_SOURCE_ROOT" "$PYTHON_HOME" "$PYTHON_BIN" "$HERMES_BIN_VALUE"',
+      ].join('; ')], { encoding: 'utf-8' })
+
+      expect(output).toContain(`PYTHON_SOURCE_ROOT=${pythonSourceRoot}`)
+      expect(output).toContain(`PYTHON_HOME=${pythonHome}`)
+      expect(output).toContain(`PYTHON_BIN=${join(pythonHome, 'bin', 'python3')}`)
+      expect(output).toContain(`HERMES_BIN=${join(pythonHome, 'bin', 'hermes')}`)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })
