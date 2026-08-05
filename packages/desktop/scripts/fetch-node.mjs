@@ -50,7 +50,7 @@ function ensureBundledNpmVersion() {
 
   console.log(`Updating bundled npm to ${NPM_VERSION}`)
   const install = runBundledNpm([
-    'install', '--global', `npm@${NPM_VERSION}`, '--no-audit', '--no-fund',
+    'install', '--global', '--prefix', OUT_DIR, `npm@${NPM_VERSION}`, '--no-audit', '--no-fund',
   ], { stdio: 'inherit' })
   if (install.status !== 0) {
     console.error(`Failed to update bundled npm to ${NPM_VERSION}`)

@@ -192,9 +192,9 @@ describe('fnOS package metadata', () => {
       packageWorkflow.indexOf('name: Prepare bundled Hermes runtime'),
     )
     expect(packageWorkflow).toContain('HERMES_DESKTOP_NPM_VERSION: "11.17.0"')
-    expect(readRootFile('packages', 'desktop', 'scripts', 'fetch-node.mjs')).toContain(
-      'HERMES_DESKTOP_NPM_VERSION',
-    )
+    const fetchNodeScript = readRootFile('packages', 'desktop', 'scripts', 'fetch-node.mjs')
+    expect(fetchNodeScript).toContain('HERMES_DESKTOP_NPM_VERSION')
+    expect(fetchNodeScript).toContain("'--prefix', OUT_DIR")
   })
 
   it('automatically publishes only successfully built fnOS Web UI updates from upstream releases', () => {
