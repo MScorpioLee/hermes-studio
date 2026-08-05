@@ -187,6 +187,10 @@ describe('fnOS package metadata', () => {
     expect(packageWorkflow).toContain('hermes_source_commit:')
     expect(packageWorkflow).toContain('HERMES_SOURCE_REF: ${{ github.event.inputs.hermes_source_ref }}')
     expect(packageWorkflow).toContain('HERMES_SOURCE_COMMIT: ${{ github.event.inputs.hermes_source_commit }}')
+    expect(packageWorkflow).toContain('uses: astral-sh/setup-uv@v3')
+    expect(packageWorkflow.indexOf('uses: astral-sh/setup-uv@v3')).toBeLessThan(
+      packageWorkflow.indexOf('name: Prepare bundled Hermes runtime'),
+    )
   })
 
   it('automatically publishes only successfully built fnOS Web UI updates from upstream releases', () => {
