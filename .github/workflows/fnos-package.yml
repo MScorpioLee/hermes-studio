@@ -39,11 +39,6 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Setup compatible npm
-        run: |
-          npm install --global npm@11.17.0
-          npm --version
-
       - name: Install uv
         uses: astral-sh/setup-uv@v3
 
@@ -60,6 +55,7 @@ jobs:
           HERMES_SOURCE_REF: ${{ github.event.inputs.hermes_source_ref }}
           HERMES_SOURCE_COMMIT: ${{ github.event.inputs.hermes_source_commit }}
           HERMES_DESKTOP_NODE_VERSION: 24.15.0
+          HERMES_DESKTOP_NPM_VERSION: "11.17.0"
           HERMES_SKIP_BROWSER_RUNTIME: "1"
         run: |
           npm ci --prefix packages/desktop --no-audit --no-fund

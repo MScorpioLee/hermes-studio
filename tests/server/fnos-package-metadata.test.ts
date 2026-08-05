@@ -191,9 +191,9 @@ describe('fnOS package metadata', () => {
     expect(packageWorkflow.indexOf('uses: astral-sh/setup-uv@v3')).toBeLessThan(
       packageWorkflow.indexOf('name: Prepare bundled Hermes runtime'),
     )
-    expect(packageWorkflow).toContain('npm install --global npm@11.17.0')
-    expect(packageWorkflow.indexOf('npm install --global npm@11.17.0')).toBeLessThan(
-      packageWorkflow.indexOf('name: Prepare bundled Hermes runtime'),
+    expect(packageWorkflow).toContain('HERMES_DESKTOP_NPM_VERSION: "11.17.0"')
+    expect(readRootFile('packages', 'desktop', 'scripts', 'fetch-node.mjs')).toContain(
+      'HERMES_DESKTOP_NPM_VERSION',
     )
   })
 

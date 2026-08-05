@@ -14,6 +14,7 @@ const ROOT = resolve(__dirname, '..')
 const TARGET_OS = process.env.TARGET_OS || osPlatform()
 const TARGET_ARCH = process.env.TARGET_ARCH || osArch()
 const NODE_VERSION = desktopNodeVersion()
+const NPM_VERSION = process.env.HERMES_DESKTOP_NPM_VERSION?.trim() || ''
 
 const OS_LABEL = TARGET_OS === 'win32' ? 'win' : TARGET_OS === 'darwin' ? 'mac' : TARGET_OS
 const OUT_DIR = resolve(ROOT, 'resources', 'node', `${OS_LABEL}-${TARGET_ARCH}`)
@@ -31,8 +32,41 @@ const baseUrl = (process.env.NODE_DIST_BASE_URL || 'https://nodejs.org/dist').re
 const url = `${baseUrl}/v${NODE_VERSION}/${file}`
 const marker = TARGET_OS === 'win32' ? 'node.exe' : join('bin', 'node')
 
+function runBundledNpm(args, options = {}) {
+  const npmPath = TARGET_OS === 'win32'
+    ? resolve(OUT_DIR, 'npm.cmd')
+    : resolve(OUT_DIR, 'bin', 'npm')
+  if (TARGET_OS === 'win32') {
+    return spawnSync('cmd.exe', ['/d', '/s', '/c', npmPath, ...args], options)
+  }
+  return spawnSync(npmPath, args, options)
+}
+
+function ensureBundledNpmVersion() {
+  if (!NPM_VERSION) return
+
+  const current = runBundledNpm(['--version'], { encoding: 'utf-8' })
+  if (current.status === 0 && current.stdout.trim() === NPM_VERSION) return
+
+  console.log(`Updating bundled npm to ${NPM_VERSION}`)
+  const install = runBundledNpm([
+    'install', '--global', `npm@${NPM_VERSION}`, '--no-audit', '--no-fund',
+  ], { stdio: 'inherit' })
+  if (install.status !== 0) {
+    console.error(`Failed to update bundled npm to ${NPM_VERSION}`)
+    process.exit(install.status ?? 1)
+  }
+
+  const verified = runBundledNpm(['--version'], { encoding: 'utf-8' })
+  if (verified.status !== 0 || verified.stdout.trim() !== NPM_VERSION) {
+    console.error(`Bundled npm version mismatch: expected ${NPM_VERSION}, found ${verified.stdout?.trim() || 'unavailable'}`)
+    process.exit(1)
+  }
+}
+
 if (existsSync(resolve(OUT_DIR, marker))) {
-  console.log(`Node.js already present at ${OUT_DIR}, skipping`)
+  ensureBundledNpmVersion()
+  console.log(`Node.js already present at ${OUT_DIR}, skipping download`)
   process.exit(0)
 }
 
@@ -59,4 +93,5 @@ if (extract.status !== 0) {
 }
 
 rmSync(archivePath, { force: true })
+ensureBundledNpmVersion()
 console.log(`Node.js ready at ${OUT_DIR}`)
