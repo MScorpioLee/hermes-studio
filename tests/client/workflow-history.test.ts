@@ -15,6 +15,52 @@ describe('workflow history evidence', () => {
     expect(formatIterationPath(scoped)).toBe('rerun:1783910000000 · outer#2 / inner#3')
   })
 
+  it('uses the selected node name instead of a loop id in operator-facing history', () => {
+    const rows = buildWorkflowEvidenceRows({
+      snapshot_nodes: [
+        { id: 'prepare', data: { title: 'Prepare release' } },
+        { id: 'review', data: { title: 'Review release' } },
+      ],
+      compiled_loops: [{
+        id: 'legacy-loop-id', feedbackEdgeId: 'review-prepare',
+        headerNodeId: 'prepare', latchNodeId: 'review', bodyNodeIds: ['prepare', 'review'],
+        maxIterations: 3, parentLoopId: null,
+      }],
+      node_sessions: [],
+      edge_evaluations: [],
+      loop_epochs: [{
+        loop_id: 'legacy-loop-id', iteration: 1, status: 'completed', exit_reason: 'feedback_taken',
+        sequence: 1, iteration_path: [{ loopId: 'legacy-loop-id', iteration: 1 }],
+      }],
+    } as any)
+
+    expect(rows[0]).toMatchObject({ kind: 'loop', loopTitle: 'Prepare release' })
+    expect(rows[0].iterationPath).toBe('Prepare release#2')
+    expect(rows[0].iterationPath).not.toContain('legacy-loop-id')
+  })
+
+  it('keeps missing snapshot titles absent instead of promoting technical node ids to user-facing labels', () => {
+    const sourceId = '11111111-1111-4111-8111-111111111111'
+    const targetId = '22222222-2222-4222-8222-222222222222'
+    const rows = buildWorkflowEvidenceRows({
+      snapshot_nodes: [{ id: sourceId, data: {} }, { id: targetId, data: {} }],
+      node_sessions: [{
+        execution_id: `${sourceId}@1`, node_id: sourceId, status: 'failed', error: 'failed',
+        sequence: 2, iteration_path: [],
+      }],
+      edge_evaluations: [{
+        edge_id: 'edge-1', source_node_id: sourceId, target_node_id: targetId,
+        source_execution_id: sourceId, source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 1, iteration_path: [],
+      }],
+      loop_epochs: [],
+    } as any)
+
+    expect(rows[0]).toMatchObject({ kind: 'edge', sourceTitle: undefined, targetTitle: undefined })
+    expect(rows[1]).toMatchObject({ kind: 'node', nodeTitle: undefined })
+    expect(rows[1].technicalId).toBe(`${sourceId}@1`)
+  })
+
   it('selects the latest node execution by sequence for canvas status, errors, and session opening', () => {
     const sessions = [
       { node_id: 'agent', execution_id: 'agent', sequence: 1, status: 'failed', error: 'old failure' },
@@ -72,9 +118,11 @@ describe('workflow history evidence', () => {
     expect(row).toMatchObject({
       kind: 'edge', sourceTitle: 'Publish release', targetTitle: 'Verify release',
       sourceOutcome: 'success', conditionPath: 'output', conditionOperator: 'contains',
-      expectedValue: 'PUBLISHED', actualValue: 'BLOCKED', businessDecision: 'BLOCKED',
+      expectedValue: 'PUBLISHED', businessDecision: 'BLOCKED',
       businessReason: 'The release lock was missing before publication.',
     })
+    expect(row.conditionActualValue).toContain('"decision":"BLOCKED"')
+    expect(row.conditionActualValue).toContain('"route_marker":"BLOCKED"')
   })
 
   it('sanitizes and bounds business explanations instead of exposing the full node output', () => {
@@ -98,7 +146,54 @@ describe('workflow history evidence', () => {
     expect(row.businessReason).toMatch(/\.\.\.$/)
     expect(row.businessDecision).not.toContain('\0')
     expect(row.businessDecision?.length).toBeLessThanOrEqual(80)
-    expect(row.actualValue).toBe(row.businessDecision)
+    expect(row.conditionActualValue).toContain('"decision"')
+    expect(row.conditionActualValue).not.toContain('\0')
+    expect(row.conditionActualValue?.length).toBeLessThanOrEqual(240)
+  })
+
+  it('projects structured decision fields without treating ordinary JSON fields as business codes', () => {
+    const rowFor = (path: string, actual: unknown) => buildWorkflowEvidenceRows({
+      snapshot_nodes: [{ id: 'source' }, { id: 'target' }],
+      node_sessions: [],
+      edge_evaluations: [{
+        edge_id: 'source-target', source_node_id: 'source', target_node_id: 'target',
+        source_execution_id: 'source', source_outcome: 'success', status: 'not_taken', route: 'success',
+        reason: 'condition_not_matched', sequence: 1, iteration_path: [],
+        orchestration: { condition: { path, operator: 'equals', value: 'PUBLISHED' } },
+        condition_evaluation: { status: 'not_matched', actual },
+      }],
+      loop_epochs: [],
+    } as any)[0]
+
+    expect(rowFor('outputJson.decision', 'BLOCKED')).toMatchObject({
+      conditionActualValue: 'BLOCKED', businessDecision: 'BLOCKED',
+    })
+    expect(rowFor('outputJson.route_marker', 'RELEASE_BLOCKED')).toMatchObject({
+      conditionActualValue: 'RELEASE_BLOCKED', businessDecision: 'RELEASE_BLOCKED',
+    })
+    expect(rowFor('outputJson.failed_gate', 'image-build')).toMatchObject({
+      conditionActualValue: 'image-build', businessDecision: undefined,
+    })
+  })
+
+  it('preserves falsy condition operands separately from parsed business projections', () => {
+    const rowFor = (actual: unknown) => buildWorkflowEvidenceRows({
+      snapshot_nodes: [{ id: 'source' }, { id: 'target' }],
+      node_sessions: [],
+      edge_evaluations: [{
+        edge_id: 'source-target', source_node_id: 'source', target_node_id: 'target',
+        source_execution_id: 'source', source_outcome: 'success', status: 'not_taken', route: 'success',
+        reason: 'condition_not_matched', sequence: 1, iteration_path: [],
+        orchestration: { condition: { path: 'outputJson.flag', operator: 'equals', value: true } },
+        condition_evaluation: { status: 'not_matched', actual },
+      }],
+      loop_epochs: [],
+    } as any)[0]
+
+    expect(rowFor(false)).toMatchObject({ conditionActualValue: 'false', businessDecision: undefined })
+    expect(rowFor(0)).toMatchObject({ conditionActualValue: '0', businessDecision: undefined })
+    expect(rowFor('')).toMatchObject({ conditionActualValue: '', businessDecision: undefined })
+    expect(rowFor(null)).toMatchObject({ conditionActualValue: 'null', businessDecision: undefined })
   })
 
   it('fails business summaries closed for malformed or ambiguous structured output', () => {
@@ -188,6 +283,184 @@ describe('workflow history evidence', () => {
     expect(overview.otherRows[0]).toMatchObject({ conditionMatched: false })
   })
 
+  it('keeps only consumed edge evaluations in the actual path while retaining unconsumed taken candidates', () => {
+    const rows = buildWorkflowEvidenceRows({
+      started_at: 1_000,
+      snapshot_nodes: [
+        { id: 'code', data: { title: 'Code' } },
+        { id: 'review', data: { title: 'Review' } },
+        { id: 'delivery', data: { title: 'Delivery' } },
+      ],
+      node_sessions: [{
+        id: 'code-2', node_id: 'code', execution_id: 'code@loop:1', status: 'completed',
+        sequence: 12, started_at: 1_200, consumed_edge_evaluation_ids: ['feedback-evaluation'],
+        iteration_path: [{ loopId: 'code-review', iteration: 1 }],
+      }],
+      edge_evaluations: [{
+        id: 'exit-evaluation', edge_id: 'review-delivery', source_node_id: 'review', target_node_id: 'delivery',
+        source_execution_id: 'review@loop:0', source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 10, evaluated_at: 1_100, iteration_path: [{ loopId: 'code-review', iteration: 0 }],
+      }, {
+        id: 'feedback-evaluation', edge_id: 'review-code', source_node_id: 'review', target_node_id: 'code',
+        source_execution_id: 'review@loop:0', source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 11, evaluated_at: 1_101, iteration_path: [{ loopId: 'code-review', iteration: 0 }],
+        orchestration: { condition: { path: 'outputJson.decision', operator: 'equals', value: 'RETRY' } },
+        condition_evaluation: { status: 'matched', actual: 'RETRY' },
+      }],
+      loop_epochs: [],
+    } as any)
+
+    const overview = summarizeWorkflowEvidenceRows(rows)
+    expect(overview.actualPathEdges.map(row => row.evaluationId)).toEqual(['feedback-evaluation'])
+    expect(overview.actualPathEdges.map(row => row.technicalId)).toEqual(['review-code'])
+    expect(overview.takenEdges.map(row => row.evaluationId)).toEqual(['feedback-evaluation'])
+    expect(overview.otherRows.map(row => row.evaluationId)).toContain('exit-evaluation')
+  })
+
+  it('scopes actual path and judgments to the current rerun epoch', () => {
+    const rows = buildWorkflowEvidenceRows({
+      started_at: 2_000,
+      snapshot_nodes: [
+        { id: 'a', data: { title: 'A' } },
+        { id: 'b', data: { title: 'B' } },
+        { id: 'c', data: { title: 'C' } },
+      ],
+      node_sessions: [{
+        id: 'current-c', node_id: 'c', execution_id: 'c@rerun', status: 'completed', sequence: 12,
+        started_at: 2_200, consumed_edge_evaluation_ids: ['current-evaluation'], iteration_path: [],
+      }],
+      edge_evaluations: [{
+        id: 'old-evaluation', edge_id: 'a-b', source_node_id: 'a', target_node_id: 'b',
+        source_execution_id: 'a@old', source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 1, evaluated_at: 1_000, iteration_path: [],
+      }, {
+        id: 'current-evaluation', edge_id: 'b-c', source_node_id: 'b', target_node_id: 'c',
+        source_execution_id: 'b@rerun', source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 11, evaluated_at: 2_100, iteration_path: [],
+      }],
+      loop_epochs: [],
+    } as any)
+
+    const overview = summarizeWorkflowEvidenceRows(rows)
+    expect(overview.actualPathEdges.map(row => row.evaluationId)).toEqual(['current-evaluation'])
+    expect(overview.otherRows.map(row => row.evaluationId)).not.toContain('old-evaluation')
+  })
+
+  it('keeps a preserve-start boundary edge consumed by the current rerun while dropping unrelated old judgments', () => {
+    const rows = buildWorkflowEvidenceRows({
+      started_at: 2_000,
+      snapshot_nodes: [
+        { id: 'a', data: { title: 'A' } },
+        { id: 'b', data: { title: 'B' } },
+        { id: 'c', data: { title: 'C' } },
+      ],
+      node_sessions: [{
+        id: 'current-c', node_id: 'c', execution_id: 'c@rerun', status: 'completed', sequence: 12,
+        started_at: 2_200, consumed_edge_evaluation_ids: ['boundary-evaluation'], iteration_path: [],
+      }],
+      edge_evaluations: [{
+        id: 'unrelated-old-evaluation', edge_id: 'a-b', source_node_id: 'a', target_node_id: 'b',
+        source_execution_id: 'a@old', source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 1, evaluated_at: 1_000, iteration_path: [],
+      }, {
+        id: 'boundary-evaluation', edge_id: 'b-c', source_node_id: 'b', target_node_id: 'c',
+        source_execution_id: 'b@preserved', source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 2, evaluated_at: 1_500, iteration_path: [],
+      }],
+      loop_epochs: [],
+    } as any)
+
+    const overview = summarizeWorkflowEvidenceRows(rows)
+    expect(overview.actualPathEdges.map(row => row.evaluationId)).toEqual(['boundary-evaluation'])
+    expect(overview.actualPathEdges[0].consumed).toBe(true)
+    expect(overview.otherRows.map(row => row.evaluationId)).not.toContain('unrelated-old-evaluation')
+    expect(workflowEdgePlaybackState('b-c', 'completed', 'completed', rows)).toBe('completed')
+  })
+
+  it('does not treat a legacy null-start session as current rerun consumption evidence', () => {
+    const rows = buildWorkflowEvidenceRows({
+      started_at: 2_000,
+      snapshot_nodes: [{ id: 'a', data: { title: 'A' } }, { id: 'b', data: { title: 'B' } }],
+      node_sessions: [{
+        id: 'legacy-b', node_id: 'b', execution_id: 'b@old', status: 'completed', sequence: 2,
+        started_at: null, consumed_edge_evaluation_ids: ['old-evaluation'], iteration_path: [],
+      }],
+      edge_evaluations: [{
+        id: 'old-evaluation', edge_id: 'a-b', source_node_id: 'a', target_node_id: 'b',
+        source_execution_id: 'a@old', source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 1, evaluated_at: 1_000, iteration_path: [],
+      }],
+      loop_epochs: [],
+    } as any)
+
+    const overview = summarizeWorkflowEvidenceRows(rows)
+    expect(overview.actualPathEdges).toEqual([])
+    expect(overview.otherRows).toEqual([])
+  })
+
+  it('fails closed for an unconsumed taken candidate when modern node evidence exists but the target never ran', () => {
+    const rows = buildWorkflowEvidenceRows({
+      started_at: 1_000,
+      snapshot_nodes: [{ id: 'review', data: { title: 'Review' } }, { id: 'delivery', data: { title: 'Delivery' } }],
+      node_sessions: [{
+        id: 'review-session', node_id: 'review', execution_id: 'review', status: 'completed', sequence: 1,
+        started_at: 1_100, consumed_edge_evaluation_ids: [], iteration_path: [],
+      }],
+      edge_evaluations: [{
+        id: 'candidate', edge_id: 'review-delivery', source_node_id: 'review', target_node_id: 'delivery',
+        source_execution_id: 'review', source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 2, evaluated_at: 1_200, iteration_path: [],
+      }],
+      loop_epochs: [],
+    } as any)
+
+    const overview = summarizeWorkflowEvidenceRows(rows)
+    expect(overview.actualPathEdges).toEqual([])
+    expect(overview.otherRows.map(row => row.evaluationId)).toEqual(['candidate'])
+  })
+
+  it('keeps a taken legacy edge when the target session exists even if its record sequence is earlier', () => {
+    const rows = buildWorkflowEvidenceRows({
+      started_at: 1_000,
+      snapshot_nodes: [{ id: 'prepare', data: { title: 'Prepare' } }, { id: 'publish', data: { title: 'Publish' } }],
+      node_sessions: [{
+        id: 'publish-session', node_id: 'publish', execution_id: 'publish', status: 'running', sequence: 2,
+        started_at: 1_100, consumed_edge_evaluation_ids: [], iteration_path: [],
+      }],
+      edge_evaluations: [{
+        id: 'prepare-publish', edge_id: 'prepare-publish', source_node_id: 'prepare', target_node_id: 'publish',
+        source_execution_id: 'prepare', source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 3, evaluated_at: 1_200, iteration_path: [],
+      }],
+      loop_epochs: [],
+    } as any)
+
+    const overview = summarizeWorkflowEvidenceRows(rows)
+    expect(overview.actualPathEdges.map(row => row.evaluationId)).toEqual(['prepare-publish'])
+    expect(overview.actualPathEdges[0].consumed).toBeUndefined()
+  })
+
+  it('falls back to persisted taken status when a legacy Run has no consumption evidence', () => {
+    const rows = buildWorkflowEvidenceRows({
+      started_at: 1_000,
+      snapshot_nodes: [{ id: 'a', data: { title: 'A' } }, { id: 'b', data: { title: 'B' } }],
+      node_sessions: [{
+        id: 'legacy-b', node_id: 'b', execution_id: 'b', status: 'completed', sequence: 2,
+        started_at: 1_100, consumed_edge_evaluation_ids: [], iteration_path: [],
+      }],
+      edge_evaluations: [{
+        id: 'legacy-edge-evaluation', edge_id: 'a-b', source_node_id: 'a', target_node_id: 'b',
+        source_execution_id: 'a', source_outcome: 'success', status: 'taken', route: 'success',
+        reason: null, sequence: 1, evaluated_at: 1_050, iteration_path: [],
+      }],
+      loop_epochs: [],
+    } as any)
+
+    const overview = summarizeWorkflowEvidenceRows(rows)
+    expect(overview.actualPathEdges.map(row => row.technicalId)).toEqual(['a-b'])
+    expect(overview.actualPathEdges[0].consumed).toBeUndefined()
+  })
+
   it('maps persisted edge decisions and the target node state to canvas playback states', () => {
     const edgeRow = (status: string) => ({ kind: 'edge', technicalId: 'publish-summary', status }) as any
 
@@ -195,6 +468,12 @@ describe('workflow history evidence', () => {
     expect(workflowEdgePlaybackState('publish-summary', 'idle', 'running', [edgeRow('not_taken')])).toBe('inactive')
     expect(workflowEdgePlaybackState('publish-summary', 'running', 'running', [edgeRow('taken')])).toBe('flowing')
     expect(workflowEdgePlaybackState('publish-summary', 'completed', 'running', [edgeRow('taken')])).toBe('completed')
+    expect(workflowEdgePlaybackState('publish-summary', 'completed', 'completed', [
+      { ...edgeRow('taken'), consumed: false },
+    ])).toBe('inactive')
+    expect(workflowEdgePlaybackState('publish-summary', 'completed', 'completed', [
+      { ...edgeRow('taken'), consumed: true },
+    ])).toBe('completed')
     expect(workflowEdgePlaybackState('publish-summary', 'failed', 'failed', [edgeRow('taken')])).toBe('failed')
     expect(workflowEdgePlaybackState('publish-summary', 'blocked', 'failed', [edgeRow('taken')])).toBe('failed')
     expect(workflowEdgePlaybackState('publish-summary', 'canceled', 'canceled', [edgeRow('taken')])).toBe('failed')

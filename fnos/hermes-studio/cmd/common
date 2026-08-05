@@ -109,6 +109,50 @@ try {
 ' "$ACTIVE_VERSION_FILE" "$field" "$allowed_root" "$(runtime_platform_key)"
 }
 
+read_active_webui_directory() {
+    [ -f "$ACTIVE_VERSION_FILE" ] || return 1
+    ensure_executable "$BUNDLED_NODE_BIN" || return 1
+
+    "$BUNDLED_NODE_BIN" -e '
+const fs = require("fs");
+const path = require("path");
+const [file, appHome, platform] = process.argv.slice(1);
+try {
+  const data = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (data.platform !== platform) process.exit(2);
+  const version = typeof data.webUiVersion === "string" ? data.webUiVersion.trim().replace(/^v/, "") : "";
+  const configuredRoot = typeof data.runtimeRootDirectory === "string" ? data.runtimeRootDirectory.trim() : "";
+  const runtimeRoot = configuredRoot || path.join(appHome, "desktop-runtime");
+  const candidates = [];
+  if (typeof data.webUiDirectory === "string" && data.webUiDirectory.trim()) {
+    candidates.push(data.webUiDirectory.trim());
+  }
+  if (version) {
+    candidates.push(path.join(runtimeRoot, "webui", version));
+    candidates.push(path.join(appHome, "webui", version));
+  }
+  const roots = [appHome, runtimeRoot]
+    .filter((value, index, values) => value && values.indexOf(value) === index)
+    .filter(value => fs.existsSync(value))
+    .map(value => fs.realpathSync(value));
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue;
+    const resolved = fs.realpathSync(candidate);
+    if (roots.some(root => {
+      const relative = path.relative(root, resolved);
+      return relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+    })) {
+      process.stdout.write(resolved);
+      process.exit(0);
+    }
+  }
+  process.exit(3);
+} catch {
+  process.exit(1);
+}
+' "$ACTIVE_VERSION_FILE" "${VAR_DIR}/hermes-web-ui" "$(runtime_platform_key)"
+}
+
 runtime_python_home() {
     local root="$1"
     if [ -f "${root}/python/venv/bin/python3" ] && [ -f "${root}/python/venv/bin/hermes" ]; then
@@ -188,7 +232,7 @@ apply_active_version_overrides() {
         HERMES_BIN_VALUE="${PYTHON_HOME}/bin/hermes"
     fi
 
-    webui_dir="$(read_active_version_field webUiDirectory "${VAR_DIR}/hermes-web-ui/webui" 2>/dev/null || true)"
+    webui_dir="$(read_active_webui_directory 2>/dev/null || true)"
     if webui_dir_ready "$webui_dir" && webui_dir_compatible "$webui_dir"; then
         SERVER_DIR="$webui_dir"
         SERVER_ENTRY="${SERVER_DIR}/dist/server/index.js"

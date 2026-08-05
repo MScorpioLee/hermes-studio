@@ -189,6 +189,7 @@ describe('AppSidebar navigation', () => {
     })
 
     expect(wrapper.text()).toContain('sidebar.mcp')
+    expect(wrapper.text()).toContain('sidebar.theme')
     expect(wrapper.text()).not.toContain('sidebar.devices')
   })
 

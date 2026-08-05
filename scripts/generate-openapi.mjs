@@ -50,6 +50,7 @@ const tagMappings = {
   'routes/hermes/models.ts': { name: 'Models', description: 'Model configuration' },
   'routes/hermes/providers.ts': { name: 'Providers', description: 'Model provider management' },
   'routes/hermes/skills.ts': { name: 'Skills', description: 'Skill browsing and management' },
+  'routes/hermes/skill-bundles.ts': { name: 'Skill Bundles', description: 'Skill bundle browsing and management' },
   'routes/hermes/plugins.ts': { name: 'Plugins', description: 'Plugin browsing and management' },
   'routes/hermes/memory.ts': { name: 'Memory', description: 'Agent memory files' },
   'routes/hermes/logs.ts': { name: 'Logs', description: 'Log file access' },
@@ -83,6 +84,7 @@ const tagMappings = {
   'routes/auth.ts': { name: 'Auth', description: 'Authentication management' },
   'routes/devices.ts': { name: 'Devices', description: 'Device pairing and LAN peer operations' },
   'routes/coding-agents.ts': { name: 'Coding Agents', description: 'Coding agent installation, config, and runs' },
+  'routes/theme.ts': { name: 'Theme', description: 'Per-user appearance settings and background image' },
   'routes/api-docs.ts': { name: 'API Docs', description: 'OpenAPI route catalog' },
 }
 

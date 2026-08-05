@@ -1,4 +1,4 @@
-name: Refresh fnOS Version Manifest
+name: Sync Upstream and Refresh fnOS Versions
 
 on:
   workflow_dispatch:
@@ -10,24 +10,161 @@ permissions:
   contents: write
 
 concurrency:
-  group: refresh-fnos-version-manifest
+  group: sync-upstream-fnos-versions
   cancel-in-progress: false
 
 jobs:
-  refresh:
+  sync:
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout fork
+      - name: Checkout fork main
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Find latest upstream Web UI release
+        id: upstream
+        env:
+          UPSTREAM_REPO: EKKOLearnAI/hermes-studio
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_tag="$(
+            gh release list --repo "$UPSTREAM_REPO" --limit 100 --json tagName,isDraft,isPrerelease \
+              --jq '.[] | select(.isDraft == false and .isPrerelease == false) | .tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' \
+              | sort -V \
+              | tail -n 1
+          )"
+          if [ -z "$latest_tag" ]; then
+            echo "No upstream semantic Web UI release was found" >&2
+            exit 1
+          fi
+          echo "tag=$latest_tag" >> "$GITHUB_OUTPUT"
+          echo "version=${latest_tag#v}" >> "$GITHUB_OUTPUT"
+          echo "Latest upstream Web UI release: $latest_tag"
+
+      - name: Check fnOS-compatible release assets
+        id: compatible
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.upstream.outputs.tag }}
+          VERSION: ${{ steps.upstream.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset_names="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          archive="hermes-web-ui-${VERSION}.tar.gz"
+          manifest="hermes-web-ui-${VERSION}.json"
+          if grep -Fxq "$archive" <<< "$asset_names" && grep -Fxq "$manifest" <<< "$asset_names"; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "fnOS-compatible Web UI $VERSION is already published"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "fnOS-compatible Web UI $VERSION still needs to be built"
+          fi
+
+      - name: Merge upstream Web UI release
+        id: merge
+        if: steps.compatible.outputs.ready != 'true'
+        env:
+          LATEST_TAG: ${{ steps.upstream.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/EKKOLearnAI/hermes-studio.git
+          git fetch --no-tags upstream "refs/tags/${LATEST_TAG}:refs/remotes/upstream/releases/${LATEST_TAG}"
+
+          if ! git merge --no-edit "refs/remotes/upstream/releases/${LATEST_TAG}"; then
+            conflicts="$(git diff --name-only --diff-filter=U | paste -sd ', ' -)"
+            git merge --abort
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "conflicts=$conflicts" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Upstream Web UI merge needs review::${LATEST_TAG} conflicts with fnOS adaptations: ${conflicts}"
+            exit 0
+          fi
+
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+          if (pkg.hermesFnosCompatible !== true) {
+            pkg.hermesFnosCompatible = true
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n')
+          }
+          NODE
+
+          if ! git diff --quiet; then
+            git add package.json
+            git commit -m "chore(fnos): retain fnOS Web UI compatibility marker"
+          fi
+
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate merged fnOS Web UI
+        if: steps.compatible.outputs.ready != 'true' && steps.merge.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm rebuild node-pty
+          npm run harness:check
+          npm run build
+          npm test -- --run \
+            tests/server/runtime-version-manager.test.ts \
+            tests/server/fnos-lifecycle.test.ts \
+            tests/server/fnos-package-metadata.test.ts \
+            tests/client/auth-api-base-url.test.ts \
+            tests/client/version-management-modal.test.ts
+          git diff --exit-code
+
+      - name: Publish fork release and request fnOS Web UI build
+        id: publish
+        if: steps.compatible.outputs.ready != 'true' && steps.merge.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.upstream.outputs.tag }}
+          VERSION: ${{ steps.upstream.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_version="$(node -p "require('./package.json').version")"
+          if [ "$actual_version" != "$VERSION" ]; then
+            echo "Merged package version $actual_version does not match upstream $VERSION" >&2
+            exit 1
+          fi
+          node -e "if (require('./package.json').hermesFnosCompatible !== true) process.exit(1)"
+
+          git push origin HEAD:main
+          git tag -f "$TAG" HEAD
+          git push --force origin "refs/tags/${TAG}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=false \
+              --title "Hermes Studio Web UI ${VERSION} for fnOS"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --latest=false \
+              --title "Hermes Studio Web UI ${VERSION} for fnOS" \
+              --notes "Automated fnOS-compatible Web UI build from upstream ${TAG}. The native fnOS shell version remains independent."
+          fi
+
+          gh workflow run webui-release.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+          echo "dispatched=true" >> "$GITHUB_OUTPUT"
 
       - name: Read downloadable Web UI releases
         id: webui
@@ -37,11 +174,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          webui_versions_json="$(gh release list --repo "${WEBUI_RELEASE_REPO}" --limit 100 --json tagName --jq '[.[].tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) | sub("^v"; "")]')"
+          webui_versions_json="$(gh release list --repo "$WEBUI_RELEASE_REPO" --limit 100 --json tagName,assets --jq '
+            [.[]
+              | select(.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+              | (.tagName | sub("^v"; "")) as $version
+              | select(any(.assets[]?; .name == ("hermes-web-ui-" + $version + ".tar.gz")))
+              | select(any(.assets[]?; .name == ("hermes-web-ui-" + $version + ".json")))
+              | $version
+            ]')"
           echo "webui_versions_json=${webui_versions_json}" >> "$GITHUB_OUTPUT"
           echo "Downloadable fnOS Web UI releases: ${webui_versions_json}"
 
-      - name: Read upstream runtime releases
+      - name: Read upstream Runtime releases
         id: runtime
         env:
           UPSTREAM_REPO: EKKOLearnAI/hermes-studio
@@ -49,7 +193,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          runtime_versions_json="$(gh release list --repo "${UPSTREAM_REPO}" --limit 100 --json tagName --jq '[.[].tagName | select(test("^hermes-[0-9]+\\.[0-9]+\\.[0-9]+-runtime$")) | sub("^hermes-"; "") | sub("-runtime$"; "")]')"
+          runtime_versions_json="$(gh release list --repo "$UPSTREAM_REPO" --limit 100 --json tagName --jq '[.[].tagName | select(test("^hermes-[0-9]+\\.[0-9]+\\.[0-9]+-runtime$")) | sub("^hermes-"; "") | sub("-runtime$"; "")]')"
           echo "runtime_versions_json=${runtime_versions_json}" >> "$GITHUB_OUTPUT"
           echo "Runtime releases: ${runtime_versions_json}"
 
@@ -67,9 +211,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           if ! git diff --quiet -- fnos/hermes-studio/webui-versions.json; then
             git add fnos/hermes-studio/webui-versions.json
             git commit -m "chore(fnos): refresh Hermes version manifest"
@@ -87,14 +228,17 @@ jobs:
           curl -fsSL "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@main/fnos/hermes-studio/webui-versions.json"
 
       - name: Summary
+        if: always()
         shell: bash
         run: |
           {
-            echo "## fnOS version manifest"
+            echo "## fnOS upstream Web UI sync"
             echo ""
-            echo "- Pushed: ${{ steps.push.outputs.pushed || 'false' }}"
+            echo "- Latest upstream: ${{ steps.upstream.outputs.tag }}"
+            echo "- Compatible artifact already existed: ${{ steps.compatible.outputs.ready || 'false' }}"
+            echo "- New artifact build dispatched: ${{ steps.publish.outputs.dispatched || 'false' }}"
+            echo "- Merge conflicts: ${{ steps.merge.outputs.conflicts || 'none' }}"
+            echo "- Manifest pushed: ${{ steps.push.outputs.pushed || 'false' }}"
             echo "- Downloadable Web UI versions: ${{ steps.webui.outputs.webui_versions_json }}"
             echo "- Runtime versions: ${{ steps.runtime.outputs.runtime_versions_json }}"
-            echo "- Source merge: disabled for scheduled runs. Native fnOS shell releases are versioned separately."
-            echo "- Web UI artifact build: use webui-release.yml manually after a compatible source sync."
           } >> "$GITHUB_STEP_SUMMARY"

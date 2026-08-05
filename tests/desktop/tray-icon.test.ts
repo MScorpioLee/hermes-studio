@@ -12,9 +12,9 @@ function pngSize(path: string): { width: number; height: number } {
 }
 
 describe('desktop tray icon', () => {
-  it('ships the existing app logo at macOS 1x and 2x menu bar sizes', () => {
-    expect(pngSize('packages/desktop/build/trayMac.png')).toEqual({ width: 18, height: 18 })
-    expect(pngSize('packages/desktop/build/trayMac@2x.png')).toEqual({ width: 36, height: 36 })
+  it('ships the existing app logo at enlarged macOS 1x and 2x menu bar sizes', () => {
+    expect(pngSize('packages/desktop/build/trayMac.png')).toEqual({ width: 22, height: 22 })
+    expect(pngSize('packages/desktop/build/trayMac@2x.png')).toEqual({ width: 44, height: 44 })
 
     const builderConfig = readFileSync(resolve('packages/desktop/electron-builder.yml'), 'utf8')
     expect(builderConfig).toContain('- "trayMac.png"')
@@ -22,7 +22,7 @@ describe('desktop tray icon', () => {
   })
 
   it('preserves the macOS logo colors instead of applying template tinting', () => {
-    const mainSource = readFileSync(resolve('packages/desktop/src/main/index.ts'), 'utf8')
+    const mainSource = readFileSync(resolve('packages/desktop/src/main/index.ts'), 'utf8').replace(/\r\n/g, '\n')
     const pathsSource = readFileSync(resolve('packages/desktop/src/main/paths.ts'), 'utf8')
 
     expect(mainSource).toContain('? desktopMacTrayIcon()')

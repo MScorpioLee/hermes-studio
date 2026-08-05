@@ -26,7 +26,7 @@ function createWebUiDir(rootDir: string, compatible: boolean) {
   writeFileSync(join(rootDir, 'dist', 'server', 'index.js'), '')
 }
 
-describe('fnOS lifecycle scripts', () => {
+describe('fnOS lifecycle scripts', { timeout: 15_000 }, () => {
   it('keeps managed gateways across Web UI-only shutdown while wrapper stop still cleans runtime processes', () => {
     const main = readFnOsScript('main')
     const common = readFnOsScript('common')
@@ -105,6 +105,33 @@ describe('fnOS lifecycle scripts', () => {
         `BUNDLED_NODE_BIN=${shellQuote(process.execPath)}`,
         'platform="$(runtime_platform_key)"',
         `printf '{"schema":1,"platform":"%s","webUiVersion":"0.6.25","webUiDirectory":"%s"}\\n' "$platform" ${shellQuote(webuiDir)} > "$ACTIVE_VERSION_FILE"`,
+        'SERVER_DIR="/bundled/server"',
+        'apply_active_version_overrides',
+        'printf "SERVER_DIR=%s\\n" "$SERVER_DIR"',
+      ].join('; ')], { encoding: 'utf-8' })
+
+      expect(output).toContain(`SERVER_DIR=${realpathSync(webuiDir)}`)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('uses an upstream-style active Web UI version stored under desktop-runtime', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hermes-fnos-active-webui-version-'))
+    const varDir = join(dir, 'var')
+    const webuiDir = join(varDir, 'hermes-web-ui', 'desktop-runtime', 'webui', '0.6.38')
+    const activeVersionFile = join(varDir, 'hermes-web-ui', 'desktop-runtime', 'active-version.json')
+    createWebUiDir(webuiDir, true)
+
+    try {
+      const output = execFileSync('bash', ['-lc', [
+        'set -e',
+        `source ${shellQuote(join(root, 'fnos', 'hermes-studio', 'cmd', 'common'))}`,
+        `VAR_DIR=${shellQuote(varDir)}`,
+        `ACTIVE_VERSION_FILE=${shellQuote(activeVersionFile)}`,
+        `BUNDLED_NODE_BIN=${shellQuote(process.execPath)}`,
+        'platform="$(runtime_platform_key)"',
+        `printf '{"schema":1,"platform":"%s","webUiVersion":"0.6.38"}\\n' "$platform" > "$ACTIVE_VERSION_FILE"`,
         'SERVER_DIR="/bundled/server"',
         'apply_active_version_overrides',
         'printf "SERVER_DIR=%s\\n" "$SERVER_DIR"',

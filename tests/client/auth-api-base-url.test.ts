@@ -35,13 +35,23 @@ describe('auth API base URL handling', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ token: 'jwt-token' }),
+      json: () => Promise.resolve({
+        token: 'jwt-token',
+        userId: 1,
+        theme: {
+          fontSize: 16,
+          textColor: null,
+          accentColor: null,
+          background: null,
+          updatedAt: 0,
+        },
+      }),
     })
 
     const { loginWithPassword } = await loadAuthApiWithBaseUrl('/app/hermes-studio/')
-    const token = await loginWithPassword('admin', '123456')
+    const session = await loginWithPassword('admin', '123456')
 
-    expect(token).toBe('jwt-token')
+    expect(session).toEqual(expect.objectContaining({ token: 'jwt-token', userId: 1 }))
     expect(mockFetch).toHaveBeenCalledWith('/app/hermes-studio/api/auth/login', expect.objectContaining({
       method: 'POST',
     }))

@@ -9,7 +9,9 @@ import { authPublicRoutes, authProtectedRoutes } from './auth'
 import { devicePublicRoutes, deviceRoutes } from './devices'
 import { mcuDeviceRoutes } from './mcu-devices'
 import { codingAgentRoutes } from './coding-agents'
+import { appRelayRoutes } from './app-relay'
 import { apiDocsRoutes } from './api-docs'
+import { themeRoutes } from './theme'
 import { claudeCodeProxyRoutes } from './claude-code-proxy'
 import { codexProxyRoutes } from './codex-proxy'
 
@@ -17,6 +19,7 @@ import { codexProxyRoutes } from './codex-proxy'
 import { sessionRoutes } from './hermes/sessions'
 import { profileRoutes } from './hermes/profiles'
 import { skillRoutes } from './hermes/skills'
+import { skillBundleRoutes } from './hermes/skill-bundles'
 import { pluginRoutes } from './hermes/plugins'
 import { memoryRoutes } from './hermes/memory'
 import { modelRoutes } from './hermes/models'
@@ -28,6 +31,7 @@ import { nousAuthRoutes } from './hermes/nous-auth'
 import { copilotAuthRoutes } from './hermes/copilot-auth'
 import { xaiAuthRoutes } from './hermes/xai-auth'
 import { anthropicAuthRoutes } from './hermes/anthropic-auth'
+import { minimaxAuthRoutes } from './hermes/minimax-auth'
 import { weixinRoutes } from './hermes/weixin'
 import { fileRoutes } from './hermes/files'
 import { downloadRoutes } from './hermes/download'
@@ -76,9 +80,12 @@ export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, ne
   app.use(uploadRoutes.routes())
   app.use(updateRoutes.routes())           // Must be before proxy (proxy catch-all matches everything)
   app.use(codingAgentRoutes.routes())
+  app.use(themeRoutes.routes())
+  app.use(appRelayRoutes.routes())
   app.use(sessionRoutes.routes())
   app.use(profileRoutes.routes())
   app.use(skillRoutes.routes())
+  app.use(skillBundleRoutes.routes())
   app.use(pluginRoutes.routes())
   app.use(memoryRoutes.routes())
   app.use(modelRoutes.routes())
@@ -90,6 +97,7 @@ export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, ne
   app.use(copilotAuthRoutes.routes())
   app.use(xaiAuthRoutes.routes())
   app.use(anthropicAuthRoutes.routes())
+  app.use(minimaxAuthRoutes.routes())
   app.use(weixinRoutes.routes())
   app.use(chatRunRoutes.routes())
   app.use(groupChatRoutes.routes())

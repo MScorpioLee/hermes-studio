@@ -7,11 +7,14 @@ import { useSettingsStore } from '@/stores/hermes/settings'
 import { fetchContextLength } from '@/api/hermes/sessions'
 import { setModelContext } from '@/api/hermes/model-context'
 import { fetchSkills, type SkillCategory, type SkillInfo } from '@/api/hermes/skills'
-import { NButton, NTooltip, NModal, NInputNumber, NPopover, NSlider, NDropdown, useMessage, type DropdownOption } from 'naive-ui'
+import { deleteSkillBundleApi, fetchSkillBundles, type SkillBundleInfo } from '@/api/hermes/skill-bundles'
+import { NButton, NTooltip, NModal, NInputNumber, NPopover, NSlider, NDropdown, useDialog, useMessage, type DropdownOption } from 'naive-ui'
 import { computed, ref, nextTick, onMounted, onUnmounted, watch, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToolTraceVisibility } from '@/composables/useToolTraceVisibility'
+import { extractClipboardFiles } from '@/utils/clipboard-files'
 import VoiceDialogueControls from './VoiceDialogueControls.vue'
+import BundleCreateModal from './BundleCreateModal.vue'
 import { useMicRecorder } from '@/composables/useMicRecorder'
 import { usePcmStreamRecorder } from '@/composables/usePcmStreamRecorder'
 import { useGlobalSpeech } from '@/composables/useSpeech'
@@ -31,6 +34,7 @@ const profilesStore = useProfilesStore()
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
 const message = useMessage()
+const dialog = useDialog()
 const { toolTraceVisible, toggleToolTraceVisible } = useToolTraceVisibility()
 
 const props = withDefaults(defineProps<{
@@ -156,6 +160,8 @@ type SlashCommandOption = {
   insertText?: string
   key: string
   opensSkillPicker?: boolean
+  opensBundlePicker?: boolean
+  opensBundleCreator?: boolean
 }
 
 function normalizeVoiceTranscript(text: string) {
@@ -178,6 +184,12 @@ function backendTranscribeOptions(): {
   if (sttSettings.provider.value === 'doubao') {
     return {
       provider: 'doubao',
+    }
+  }
+
+  if (sttSettings.provider.value !== 'browser') {
+    return {
+      provider: sttSettings.provider.value,
     }
   }
 
@@ -273,6 +285,8 @@ const bridgeCommands = computed<SlashCommandOption[]>(() =>
     description: t(command.descriptionKey),
     insertText: command.insertText,
     opensSkillPicker: command.opensSkillPicker,
+    opensBundlePicker: command.opensBundlePicker,
+    opensBundleCreator: command.opensBundleCreator,
   }))
 )
 
@@ -285,7 +299,20 @@ const skillSearch = ref('')
 const skillPickerLoading = ref(false)
 let skillsLoadedKey = ''
 let skillsLoadRequest: Promise<void> | null = null
-const isBridgeSession = computed(() => chatStore.activeSession?.source === 'cli')
+const bundles = ref<SkillBundleInfo[]>([])
+const showBundlePicker = ref(false)
+const showBundleCreator = ref(false)
+const bundleSearch = ref('')
+const bundlePickerLoading = ref(false)
+const deletingBundleCommand = ref('')
+let bundlesLoadedKey = ''
+let bundlesLoadRequest: Promise<void> | null = null
+let bundlesLoadRequestKey = ''
+const isBridgeSession = computed(() => {
+  const session = chatStore.activeSession
+  if (!session) return chatStore.runtimeMode !== 'global_agent'
+  return session.source === 'cli'
+})
 const isForkCommandSession = computed(() => !!chatStore.activeSession && chatStore.activeSession.source !== 'coding_agent')
 const skillPickerItems = computed(() => {
   const byName = new Map<string, SkillInfo>()
@@ -329,6 +356,16 @@ const filteredSkillPickerItems = computed(() => {
     || skill.description.toLowerCase().includes(query),
   )
 })
+const filteredBundles = computed(() => {
+  const query = bundleSearch.value.trim().toLowerCase()
+  if (!query) return bundles.value
+  return bundles.value.filter(bundle =>
+    bundle.name.toLowerCase().includes(query)
+    || bundle.commandName.includes(query)
+    || bundle.description.toLowerCase().includes(query)
+    || bundle.skills.some(skill => skill.toLowerCase().includes(query)),
+  )
+})
 
 function skillCommandName(name: string) {
   return name
@@ -364,6 +401,33 @@ async function loadSkills() {
     }
   })()
   return skillsLoadRequest
+}
+
+async function loadBundles() {
+  if (!isBridgeSession.value) return
+  const key = currentSkillsKey()
+  if (bundlesLoadedKey === key) return
+  if (bundlesLoadRequest && bundlesLoadRequestKey === key) return bundlesLoadRequest
+  const request = (async () => {
+    try {
+      const data = await fetchSkillBundles(key)
+      if (currentSkillsKey() !== key) return
+      bundles.value = data
+      bundlesLoadedKey = key
+    } catch {
+      if (currentSkillsKey() !== key) return
+      bundles.value = []
+      bundlesLoadedKey = ''
+    } finally {
+      if (bundlesLoadRequestKey === key) {
+        bundlesLoadRequest = null
+        bundlesLoadRequestKey = ''
+      }
+    }
+  })()
+  bundlesLoadRequest = request
+  bundlesLoadRequestKey = key
+  return request
 }
 
 // 自定义高度拖拽
@@ -555,6 +619,8 @@ watch(
   () => {
     skillsLoadedKey = ''
     skillCategories.value = []
+    bundlesLoadedKey = ''
+    bundles.value = []
   },
 )
 
@@ -593,6 +659,16 @@ function selectBridgeCommand(command: SlashCommandOption) {
     void openSkillPicker()
     return
   }
+  if (command.opensBundlePicker) {
+    slashActive.value = false
+    void openBundlePicker()
+    return
+  }
+  if (command.opensBundleCreator) {
+    slashActive.value = false
+    openBundleCreator()
+    return
+  }
   inputText.value = `/${command.insertText || command.name} `
   slashActive.value = false
   nextTick(() => {
@@ -626,6 +702,72 @@ function selectSkill(skill: { commandName: string }) {
     const pos = inputText.value.length
     el.setSelectionRange(pos, pos)
     el.focus()
+  })
+}
+
+async function openBundlePicker() {
+  if (!isBridgeSession.value) return
+  slashActive.value = false
+  bundleSearch.value = ''
+  showBundlePicker.value = true
+  bundlePickerLoading.value = true
+  try {
+    await loadBundles()
+  } finally {
+    bundlePickerLoading.value = false
+  }
+}
+
+function openBundleCreator() {
+  if (!isBridgeSession.value) return
+  slashActive.value = false
+  showBundlePicker.value = false
+  showBundleCreator.value = true
+}
+
+function selectBundle(bundle: SkillBundleInfo) {
+  inputText.value = `/bundles ${bundle.commandName} `
+  showBundlePicker.value = false
+  nextTick(() => {
+    const el = textareaRef.value
+    if (!el) return
+    const pos = inputText.value.length
+    el.setSelectionRange(pos, pos)
+    el.focus()
+  })
+}
+
+function handleBundleCreated(bundle: SkillBundleInfo) {
+  showBundleCreator.value = false
+  bundlesLoadedKey = ''
+  bundles.value = [bundle, ...bundles.value.filter(item => item.commandName !== bundle.commandName)]
+  selectBundle(bundle)
+}
+
+function confirmDeleteBundle(bundle: SkillBundleInfo) {
+  const profile = currentSkillsKey()
+  dialog.warning({
+    title: t('chat.bundlePicker.deleteTitle'),
+    content: t('chat.bundlePicker.deleteConfirm', { name: bundle.name }),
+    positiveText: t('common.delete'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: async () => {
+      deletingBundleCommand.value = bundle.commandName
+      try {
+        await deleteSkillBundleApi(profile, bundle.commandName)
+        if (currentSkillsKey() === profile) {
+          bundles.value = bundles.value.filter(item => item.commandName !== bundle.commandName)
+        } else {
+          bundlesLoadedKey = ''
+        }
+        message.success(t('chat.bundlePicker.deleted'))
+      } catch (err: any) {
+        message.error(`${t('chat.bundlePicker.deleteFailed')}: ${err?.message || ''}`)
+        return false
+      } finally {
+        deletingBundleCommand.value = ''
+      }
+    },
   })
 }
 
@@ -755,7 +897,7 @@ function formatTokens(n: number): string {
 
 // --- File attachment helpers ---
 
-function addFile(file: File) {
+function addFile(file: File, context?: string) {
   if (attachments.value.find(a => a.name === file.name)) return
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
   const url = URL.createObjectURL(file)
@@ -766,12 +908,18 @@ function addFile(file: File) {
     size: file.size,
     url,
     file,
+    ...(context?.trim() ? { context: context.trim() } : {}),
   })
 }
 
 function addFiles(files: File[]) {
   for (const file of files) addFile(file)
   if (files.length > 0) textareaRef.value?.focus()
+}
+
+function addBrowserAttachment(file: File, context: string) {
+  addFile(file, context)
+  textareaRef.value?.focus()
 }
 
 function handleAttachClick() {
@@ -785,20 +933,13 @@ function handleFileChange(e: Event) {
   input.value = ''
 }
 
-// --- Paste image ---
+// --- Paste files ---
 
 function handlePaste(e: ClipboardEvent) {
-  const items = Array.from(e.clipboardData?.items || [])
-  const imageItems = items.filter(i => i.type.startsWith('image/'))
-  if (!imageItems.length) return
+  const files = extractClipboardFiles(e.clipboardData)
+  if (!files.length) return
   e.preventDefault()
-  for (const item of imageItems) {
-    const blob = item.getAsFile()
-    if (!blob) continue
-    const ext = item.type.split('/')[1] || 'png'
-    const file = new File([blob], `pasted-${Date.now()}.${ext}`, { type: item.type })
-    addFiles([file])
-  }
+  addFiles(files)
 }
 
 // --- Drag and drop ---
@@ -832,7 +973,7 @@ function handleDrop(e: DragEvent) {
   addFiles(files)
 }
 
-defineExpose({ addFiles })
+defineExpose({ addFiles, addBrowserAttachment })
 
 // --- Send ---
 
@@ -841,6 +982,14 @@ function handleSend() {
   if (!text && attachments.value.length === 0) return
   if (isBridgeSession.value && text === '/skill' && attachments.value.length === 0) {
     void openSkillPicker()
+    return
+  }
+  if (isBridgeSession.value && attachments.value.length === 0 && /^\/bundles$/i.test(text)) {
+    void openBundlePicker()
+    return
+  }
+  if (isBridgeSession.value && attachments.value.length === 0 && /^\/bundles\s+create$/i.test(text)) {
+    openBundleCreator()
     return
   }
 
@@ -1062,7 +1211,7 @@ function isImage(type: string): boolean {
         v-for="att in attachments"
         :key="att.id"
         class="attachment-preview"
-        :class="{ image: isImage(att.type) }"
+        :class="{ image: isImage(att.type), 'has-context': !!att.context }"
       >
         <template v-if="isImage(att.type)">
           <img :src="att.url" :alt="att.name" class="attachment-thumb" />
@@ -1074,6 +1223,10 @@ function isImage(type: string): boolean {
             <span class="file-size">{{ formatSize(att.size) }}</span>
           </div>
         </template>
+        <details v-if="att.context" class="attachment-context">
+          <summary>{{ t('browser.selectionData') }}</summary>
+          <pre>{{ att.context }}</pre>
+        </details>
         <button class="attachment-remove" @click="removeAttachment(att.id)">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -1147,6 +1300,7 @@ function isImage(type: string): boolean {
         ref="textareaRef"
         v-model="inputText"
         class="input-textarea"
+        dir="auto"
         :style="textareaHeight ? { height: textareaHeight + 'px' } : {}"
         :placeholder="t('chat.inputPlaceholder')"
         rows="1"
@@ -1389,6 +1543,79 @@ function isImage(type: string): boolean {
       </div>
     </NModal>
 
+    <NModal
+      v-model:show="showBundlePicker"
+      :title="t('chat.bundlePicker.title')"
+      :mask-closable="true"
+      preset="card"
+      style="width: min(620px, calc(100vw - 32px))"
+    >
+      <div v-if="showBundlePicker" class="skill-picker-modal">
+        <div class="bundle-picker-toolbar">
+          <input
+            v-model="bundleSearch"
+            class="skill-picker-search"
+            :placeholder="t('chat.bundlePicker.searchPlaceholder')"
+            type="search"
+          />
+          <NButton type="primary" @click="openBundleCreator">
+            {{ t('chat.bundlePicker.create') }}
+          </NButton>
+        </div>
+        <div class="skill-picker-list">
+          <div v-if="bundlePickerLoading" class="skill-picker-empty">
+            {{ t('common.loading') }}
+          </div>
+          <template v-else>
+            <div
+              v-for="bundle in filteredBundles"
+              :key="bundle.commandName"
+              class="skill-picker-item bundle-picker-item"
+            >
+              <button type="button" class="bundle-picker-select" @click="selectBundle(bundle)">
+                <span class="skill-picker-command">/bundles {{ bundle.commandName }}</span>
+                <span class="skill-picker-name">{{ bundle.name }}</span>
+                <span v-if="bundle.description" class="skill-picker-desc">
+                  {{ bundle.description }}
+                </span>
+                <span class="bundle-picker-skills">
+                  {{ t('chat.bundlePicker.skillsLabel') }}:
+                  {{ bundle.skills.length > 0 ? bundle.skills.join(', ') : t('chat.bundlePicker.noSkills') }}
+                </span>
+              </button>
+              <button
+                type="button"
+                class="bundle-picker-delete"
+                :disabled="deletingBundleCommand === bundle.commandName"
+                :aria-label="t('chat.bundlePicker.deleteBundle', { name: bundle.name })"
+                :title="t('chat.bundlePicker.deleteBundle', { name: bundle.name })"
+                @mousedown.stop
+                @click.stop="confirmDeleteBundle(bundle)"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                  <path d="M10 11v5M14 11v5" />
+                </svg>
+              </button>
+            </div>
+          </template>
+          <div v-if="!bundlePickerLoading && filteredBundles.length === 0" class="skill-picker-empty">
+            {{ bundleSearch ? t('chat.bundlePicker.noMatch') : t('chat.bundlePicker.noBundles') }}
+          </div>
+        </div>
+      </div>
+    </NModal>
+
+    <BundleCreateModal
+      v-if="showBundleCreator"
+      :key="currentSkillsKey()"
+      :profile="currentSkillsKey()"
+      @close="showBundleCreator = false"
+      @created="handleBundleCreated"
+    />
+
     <!-- Context Length Edit Modal -->
     <NModal
       v-model:show="showContextEditModal"
@@ -1458,7 +1685,7 @@ function isImage(type: string): boolean {
   align-items: center;
   gap: 5px;
   padding: 0 0 0 2px;
-  margin-left: 0;
+  margin-inline-start: 0;
 
   .switch-label {
     display: flex;
@@ -1476,7 +1703,7 @@ function isImage(type: string): boolean {
 
   :deep(.n-switch),
   :deep(.n-switch__rail) {
-    margin-right: 0;
+    margin-inline-end: 0;
   }
 }
 
@@ -1488,7 +1715,7 @@ function isImage(type: string): boolean {
   width: 24px;
   min-width: 24px;
   height: 22px;
-  margin-left: 0;
+  margin-inline-start: 0;
   padding: 0;
   background: transparent !important;
   opacity: 1;
@@ -1734,12 +1961,13 @@ function isImage(type: string): boolean {
   min-width: 0;
   max-width: calc(100% - 28px);
   padding: 0;
+  color: $text-muted;
   pointer-events: auto;
 }
 
 .context-info {
   font-size: 11px;
-  color: $text-muted;
+  color: inherit;
   min-width: 0;
   white-space: nowrap;
 
@@ -1764,15 +1992,19 @@ function isImage(type: string): boolean {
 .context-bar {
   width: 60px;
   height: 4px;
-  margin-left: -4px;
-  background: rgba(128, 128, 128, 0.2);
+  margin-inline-start: -4px;
+  background: rgba(var(--text-muted-rgb), 0.2);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .context-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, rgba(128, 128, 128, 0.3), rgba(128, 128, 128, 0.6));
+  background: linear-gradient(
+    90deg,
+    rgba(var(--text-muted-rgb), 0.45),
+    rgba(var(--text-muted-rgb), 0.85)
+  );
   border-radius: 2px;
   transition: width 0.3s ease;
 
@@ -1785,29 +2017,25 @@ function isImage(type: string): boolean {
   }
 }
 
-.dark .context-info {
-  color: rgba(255, 255, 255, 0.68);
-
-  &.context-warning {
-    color: #f0bc58;
-  }
-}
-
 .dark .context-limit-editable {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary);
 
   &:hover {
-    border-bottom-color: rgba(255, 255, 255, 0.58);
-    background: rgba(255, 255, 255, 0.08);
+    border-bottom-color: var(--text-muted);
+    background: rgba(var(--text-muted-rgb), 0.1);
   }
 }
 
 .dark .context-bar {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(var(--text-muted-rgb), 0.2);
 }
 
 .dark .context-bar-fill {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.72));
+  background: linear-gradient(
+    90deg,
+    rgba(var(--text-muted-rgb), 0.5),
+    rgba(var(--text-muted-rgb), 0.9)
+  );
 
   &.context-bar-warn {
     background: linear-gradient(90deg, #d99d35, #f0bc58);
@@ -1900,12 +2128,36 @@ function isImage(type: string): boolean {
     width: 64px;
     height: 64px;
   }
+
+  &.image.has-context {
+    width: min(420px, 100%);
+    height: auto;
+  }
 }
 
 .attachment-thumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.attachment-preview.has-context .attachment-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.attachment-context {
+  padding: 7px 9px;
+  border-top: 1px solid $border-color;
+  font-size: 11px;
+  color: $text-secondary;
+
+  summary { cursor: pointer; user-select: none; }
+  pre { max-height: 180px; margin: 8px 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 10px/1.45 monospace; }
 }
 
 .attachment-file {
@@ -1967,7 +2219,7 @@ function isImage(type: string): boolean {
   width: 100%;
   min-height: 150px;
   background-color: $bg-card;
-  border: 1px solid $border-color;
+  border: 1px solid var(--input-border-color);
   border-radius: 18px;
   padding: 22px 12px 9px;
   position: relative;
@@ -1976,8 +2228,12 @@ function isImage(type: string): boolean {
   transition: border-color $transition-fast, box-shadow $transition-fast;
 
   &:focus-within {
-    border-color: rgba(var(--text-primary-rgb), 0.22);
+    border-color: var(--input-border-focus-color);
     box-shadow: 0 10px 32px rgba(0, 0, 0, 0.11);
+  }
+
+  &:hover:not(:focus-within) {
+    border-color: var(--input-border-hover-color);
   }
 
   &.drag-over {
@@ -2028,7 +2284,8 @@ function isImage(type: string): boolean {
   }
 
   &::placeholder {
-    color: $text-muted;
+    color: var(--input-placeholder-color);
+    opacity: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2205,6 +2462,17 @@ function isImage(type: string): boolean {
   gap: 12px;
 }
 
+.bundle-picker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .skill-picker-search {
+    min-width: 0;
+    flex: 1;
+  }
+}
+
 .skill-picker-search {
   width: 100%;
   height: 34px;
@@ -2241,7 +2509,7 @@ function isImage(type: string): boolean {
   border-radius: $radius-sm;
   background: $bg-secondary;
   color: $text-primary;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   overflow: hidden;
   outline: none;
@@ -2250,6 +2518,56 @@ function isImage(type: string): boolean {
   &:hover {
     border-color: rgba(var(--accent-primary-rgb), 0.5);
     background: rgba(var(--accent-primary-rgb), 0.08);
+  }
+}
+
+.bundle-picker-item {
+  position: relative;
+  height: 96px;
+  flex-basis: 96px;
+  padding: 0;
+  cursor: default;
+}
+
+.bundle-picker-select {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 7px 42px 7px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  outline: none;
+}
+
+.bundle-picker-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: $text-muted;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    outline: none;
+  }
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.45;
   }
 }
 
@@ -2272,6 +2590,18 @@ function isImage(type: string): boolean {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.bundle-picker-skills {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: $text-muted;
+  font-size: 11px;
+  line-height: 16px;
 }
 
 .skill-picker-name {
@@ -2298,6 +2628,10 @@ function isImage(type: string): boolean {
 @media (max-width: 768px) {
   .skill-picker-item {
     height: 76px;
+  }
+
+  .bundle-picker-item {
+    height: 96px;
   }
 
   .input-wrapper {

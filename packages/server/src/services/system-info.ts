@@ -101,6 +101,10 @@ export async function getHermesAgentRuntimeVersion(): Promise<string> {
   return cliVersion || getHermesAgentRuntimeVersionFromManifest()
 }
 
+export async function getHermesAgentVersion(): Promise<string> {
+  return normalizeHermesAgentVersion(await hermesCli.getVersion())
+}
+
 function isValidDeviceIdentity(value: any): value is DeviceIdentity {
   return typeof value?.device_id === 'string' &&
     value.device_id.length >= 16 &&

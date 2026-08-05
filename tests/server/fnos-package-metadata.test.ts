@@ -179,4 +179,19 @@ describe('fnOS package metadata', () => {
       buildScript.indexOf("run(fnpack, ['build', '--directory', stageDir]"),
     )
   })
+
+  it('automatically publishes only successfully built fnOS Web UI updates from upstream releases', () => {
+    const syncWorkflow = readRootFile('.github', 'workflows', 'sync-upstream.yml')
+    const releaseWorkflow = readRootFile('.github', 'workflows', 'webui-release.yml')
+
+    expect(syncWorkflow).toContain('Find latest upstream Web UI release')
+    expect(syncWorkflow).toContain('git merge --no-edit')
+    expect(syncWorkflow).toContain('git merge --abort')
+    expect(syncWorkflow).toContain('gh workflow run webui-release.yml')
+    expect(syncWorkflow).toContain('hermes-web-ui-" + $version + ".tar.gz')
+    expect(syncWorkflow).toContain('hermes-web-ui-" + $version + ".json')
+    expect(syncWorkflow).toContain('npm run build')
+    expect(syncWorkflow.indexOf('npm run build')).toBeLessThan(syncWorkflow.indexOf('git push origin HEAD:main'))
+    expect(releaseWorkflow).toContain('gh workflow run sync-upstream.yml')
+  })
 })
