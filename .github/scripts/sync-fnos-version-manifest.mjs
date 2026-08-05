@@ -3,16 +3,17 @@ import fs from 'node:fs'
 
 const manifestPath = process.env.MANIFEST_PATH || 'fnos/hermes-studio/webui-versions.json'
 const webUiVersion = process.env.WEBUI_VERSION
+const webUiVersions = parseJsonArray(process.env.WEBUI_VERSIONS_JSON || '[]')
 const runtimeVersions = parseJsonArray(process.env.RUNTIME_VERSIONS_JSON || '[]')
 
-if (!webUiVersion) {
-  throw new Error('WEBUI_VERSION is required')
+if (!webUiVersion && webUiVersions.length === 0 && runtimeVersions.length === 0) {
+  throw new Error('At least one of WEBUI_VERSION, WEBUI_VERSIONS_JSON, or RUNTIME_VERSIONS_JSON is required')
 }
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
 
 manifest.schema = manifest.schema || 1
-manifest.webui = sortVersions(unique([webUiVersion, ...(manifest.webui || [])]))
+manifest.webui = sortVersions(unique([webUiVersion, ...webUiVersions, ...(manifest.webui || [])]))
 manifest.hermes = sortVersions(unique([...runtimeVersions, ...(manifest.hermes || [])]))
 
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)

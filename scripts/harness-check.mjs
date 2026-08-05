@@ -248,6 +248,7 @@ const desktopManualBuildWorkflow = await readText('.github/workflows/desktop-man
 const desktopMacUpdateManifestWorkflow = await readText('.github/workflows/desktop-mac-update-manifest.yml')
 const desktopRuntimeWorkflow = await readText('.github/workflows/desktop-runtime.yml')
 const webuiReleaseWorkflow = await readText('.github/workflows/webui-release.yml')
+const syncUpstreamWorkflow = await readText('.github/workflows/sync-upstream.yml')
 const dockerPublishWorkflow = await readText('.github/workflows/docker-publish.yml')
 const electronBuilderConfig = await readText('packages/desktop/electron-builder.yml')
 const desktopMacEntitlements = await readText('packages/desktop/build/entitlements.mac.plist')
@@ -302,6 +303,19 @@ if (!webuiReleaseWorkflow.includes("VITE_HERMES_FNOS_GATEWAY_COMPAT: '1'")) {
 }
 if (!webuiReleaseWorkflow.includes("VITE_HERMES_DIRECT_WS_PORT: '6060'")) {
   fail('webui-release.yml must keep the fnOS direct WebSocket fallback port configured')
+}
+
+if (syncUpstreamWorkflow.includes('git merge --no-edit upstream/main')) {
+  fail('sync-upstream.yml must not automatically merge upstream/main on the fnOS manifest schedule')
+}
+if (!syncUpstreamWorkflow.includes('WEBUI_VERSIONS_JSON')) {
+  fail('sync-upstream.yml must refresh the fnOS Web UI version list without a source merge')
+}
+if (!syncUpstreamWorkflow.includes('RUNTIME_VERSIONS_JSON')) {
+  fail('sync-upstream.yml must refresh the Hermes runtime version list')
+}
+if (!syncUpstreamWorkflow.includes('WEBUI_RELEASE_REPO: ${{ github.repository }}')) {
+  fail('sync-upstream.yml must read Web UI versions from downloadable releases in this fork')
 }
 
 if (!electronBuilderConfig.includes('icon: build/icons')) {
