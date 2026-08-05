@@ -180,6 +180,15 @@ describe('fnOS package metadata', () => {
     )
   })
 
+  it('pins the bundled Hermes source when overriding its runtime version', () => {
+    const packageWorkflow = readRootFile('.github', 'workflows', 'fnos-package.yml')
+
+    expect(packageWorkflow).toContain('hermes_source_ref:')
+    expect(packageWorkflow).toContain('hermes_source_commit:')
+    expect(packageWorkflow).toContain('HERMES_SOURCE_REF: ${{ github.event.inputs.hermes_source_ref }}')
+    expect(packageWorkflow).toContain('HERMES_SOURCE_COMMIT: ${{ github.event.inputs.hermes_source_commit }}')
+  })
+
   it('automatically publishes only successfully built fnOS Web UI updates from upstream releases', () => {
     const syncWorkflow = readRootFile('.github', 'workflows', 'sync-upstream.yml')
     const releaseWorkflow = readRootFile('.github', 'workflows', 'webui-release.yml')
