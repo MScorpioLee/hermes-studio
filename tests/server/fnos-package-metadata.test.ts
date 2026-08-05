@@ -188,6 +188,8 @@ describe('fnOS package metadata', () => {
     expect(syncWorkflow).toContain('git merge --no-edit')
     expect(syncWorkflow).toContain('git merge --abort')
     expect(syncWorkflow).toContain('gh workflow run webui-release.yml')
+    expect(syncWorkflow).toContain('gh api "repos/${WEBUI_RELEASE_REPO}/releases?per_page=100"')
+    expect(syncWorkflow).not.toContain('--json tagName,assets')
     expect(syncWorkflow).toContain('hermes-web-ui-" + $version + ".tar.gz')
     expect(syncWorkflow).toContain('hermes-web-ui-" + $version + ".json')
     expect(syncWorkflow).toContain('npm run build')

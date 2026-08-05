@@ -174,10 +174,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          webui_versions_json="$(gh release list --repo "$WEBUI_RELEASE_REPO" --limit 100 --json tagName,assets --jq '
+          webui_versions_json="$(gh api "repos/${WEBUI_RELEASE_REPO}/releases?per_page=100" --jq '
             [.[]
-              | select(.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
-              | (.tagName | sub("^v"; "")) as $version
+              | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+              | (.tag_name | sub("^v"; "")) as $version
               | select(any(.assets[]?; .name == ("hermes-web-ui-" + $version + ".tar.gz")))
               | select(any(.assets[]?; .name == ("hermes-web-ui-" + $version + ".json")))
               | $version
