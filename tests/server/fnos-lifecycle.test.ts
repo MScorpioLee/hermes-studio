@@ -115,4 +115,45 @@ describe('fnOS lifecycle scripts', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it('uses the python venv from a schema 2 downloaded runtime', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hermes-fnos-runtime-'))
+    const varDir = join(dir, 'var')
+    const platform = process.platform === 'darwin' ? `mac-${process.arch}` : `${process.platform}-${process.arch}`
+    const runtimeDir = join(varDir, 'hermes-web-ui', 'desktop-runtime', 'hermes', '0.20.0', platform)
+    const pythonHome = join(runtimeDir, 'python', 'venv')
+    const activeVersionFile = join(varDir, 'hermes-web-ui', 'desktop-runtime', 'active-version.json')
+    mkdirSync(join(pythonHome, 'bin'), { recursive: true })
+    mkdirSync(join(runtimeDir, 'node', 'bin'), { recursive: true })
+    writeFileSync(join(pythonHome, 'bin', 'python3'), '')
+    writeFileSync(join(pythonHome, 'bin', 'hermes'), '')
+    writeFileSync(join(runtimeDir, 'node', 'bin', 'node'), '')
+    writeFileSync(join(runtimeDir, 'runtime-manifest.json'), JSON.stringify({
+      schema: 2,
+      platform,
+      hermesAgentVersion: '0.20.0',
+    }))
+    mkdirSync(join(varDir, 'hermes-web-ui', 'desktop-runtime'), { recursive: true })
+
+    try {
+      const output = execFileSync('bash', ['-lc', [
+        'set -e',
+        `source ${shellQuote(join(root, 'fnos', 'hermes-studio', 'cmd', 'common'))}`,
+        `VAR_DIR=${shellQuote(varDir)}`,
+        `ACTIVE_VERSION_FILE=${shellQuote(activeVersionFile)}`,
+        `BUNDLED_NODE_BIN=${shellQuote(process.execPath)}`,
+        `printf '{"schema":1,"platform":"%s","hermesRuntimeVersion":"0.20.0","runtimeDirectory":"%s"}\\n' ${shellQuote(platform)} ${shellQuote(runtimeDir)} > "$ACTIVE_VERSION_FILE"`,
+        'apply_active_version_overrides',
+        'printf "RUNTIME_ROOT=%s\\nPYTHON_SOURCE_ROOT=%s\\nPYTHON_HOME=%s\\nPYTHON_BIN=%s\\nHERMES_BIN=%s\\n" "$RUNTIME_ROOT" "$PYTHON_SOURCE_ROOT" "$PYTHON_HOME" "$PYTHON_BIN" "$HERMES_BIN_VALUE"',
+      ].join('; ')], { encoding: 'utf-8' })
+
+      expect(output).toContain(`RUNTIME_ROOT=${realpathSync(runtimeDir)}`)
+      expect(output).toContain(`PYTHON_SOURCE_ROOT=${realpathSync(join(runtimeDir, 'python'))}`)
+      expect(output).toContain(`PYTHON_HOME=${realpathSync(pythonHome)}`)
+      expect(output).toContain(`PYTHON_BIN=${realpathSync(join(pythonHome, 'bin', 'python3'))}`)
+      expect(output).toContain(`HERMES_BIN=${realpathSync(join(pythonHome, 'bin', 'hermes'))}`)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

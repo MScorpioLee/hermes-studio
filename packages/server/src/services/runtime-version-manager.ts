@@ -171,13 +171,24 @@ function readRuntimeManifestVersion(runtimeDir: string): string | undefined {
   return match?.[1]
 }
 
+function runtimePythonEnvironmentRoot(root: string): string {
+  const sourceRoot = join(root, 'python')
+  const venvRoot = join(sourceRoot, 'venv')
+  const venvPython = process.platform === 'win32'
+    ? [join(venvRoot, 'Scripts', 'python.exe'), join(venvRoot, 'python.exe')]
+    : [join(venvRoot, 'bin', 'python3')]
+  return venvPython.some(existsSync) ? venvRoot : sourceRoot
+}
+
 function requiredRuntimeFiles(root: string): string[] {
+  const pythonRoot = runtimePythonEnvironmentRoot(root)
+  const standardWindowsPython = join(pythonRoot, 'Scripts', 'python.exe')
   const pythonBin = process.platform === 'win32'
-    ? join(root, 'python', 'python.exe')
-    : join(root, 'python', 'bin', 'python3')
+    ? existsSync(standardWindowsPython) ? standardWindowsPython : join(pythonRoot, 'python.exe')
+    : join(pythonRoot, 'bin', 'python3')
   const hermesBin = process.platform === 'win32'
-    ? join(root, 'python', 'Scripts', 'hermes.cmd')
-    : join(root, 'python', 'bin', 'hermes')
+    ? join(pythonRoot, 'Scripts', 'hermes.cmd')
+    : join(pythonRoot, 'bin', 'hermes')
   const nodeBin = process.platform === 'win32'
     ? join(root, 'node', 'node.exe')
     : join(root, 'node', 'bin', 'node')
@@ -287,12 +298,14 @@ function inferCurrentRuntimeDirectory(): string {
 
 function currentRuntimeReady(root: string): boolean {
   if (!root) return false
+  const pythonRoot = runtimePythonEnvironmentRoot(root)
+  const standardWindowsPython = join(pythonRoot, 'Scripts', 'python.exe')
   const pythonBin = process.platform === 'win32'
-    ? join(root, 'python', 'python.exe')
-    : join(root, 'python', 'bin', 'python3')
+    ? existsSync(standardWindowsPython) ? standardWindowsPython : join(pythonRoot, 'python.exe')
+    : join(pythonRoot, 'bin', 'python3')
   const hermesBin = process.platform === 'win32'
-    ? join(root, 'python', 'Scripts', 'hermes.exe')
-    : join(root, 'python', 'bin', 'hermes')
+    ? join(pythonRoot, 'Scripts', 'hermes.exe')
+    : join(pythonRoot, 'bin', 'hermes')
   const nodeBin = process.platform === 'win32'
     ? join(root, 'node', 'node.exe')
     : join(root, 'node', 'bin', 'node')

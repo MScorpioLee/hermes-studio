@@ -1,6 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createReadStream, chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import * as tar from 'tar'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const originalEnv = { ...process.env }
@@ -78,5 +80,84 @@ describe('runtime version manager', () => {
       'hermes-0.18.0-runtime',
       'github',
     )).toBe('https://github.com/EKKOLearnAI/hermes-studio/releases/download/hermes-0.18.0-runtime/hermes-runtime-linux-x64.json')
+  })
+
+  it('downloads schema 2 runtimes whose Python environment is under python/venv', async () => {
+    const fixtureRoot = tempDir()
+    const archive = join(tempDir(), 'runtime-schema-2.tar.gz')
+    const assetName = 'runtime-schema-2.tar.gz'
+    const platform = `${process.platform === 'darwin' ? 'mac' : process.platform}-${process.arch}`
+
+    mkdirSync(join(fixtureRoot, 'python', 'venv', 'bin'), { recursive: true })
+    mkdirSync(join(fixtureRoot, 'python', '.git'), { recursive: true })
+    mkdirSync(join(fixtureRoot, 'node', 'bin'), { recursive: true })
+    for (const file of [
+      join(fixtureRoot, 'python', 'venv', 'bin', 'python3'),
+      join(fixtureRoot, 'python', 'venv', 'bin', 'hermes'),
+      join(fixtureRoot, 'node', 'bin', 'node'),
+    ]) {
+      writeFileSync(file, '#!/bin/sh\n')
+      chmodSync(file, 0o755)
+    }
+    writeFileSync(join(fixtureRoot, 'python', '.git', 'HEAD'), 'ref: refs/heads/main\n')
+    writeFileSync(join(fixtureRoot, 'python', 'pyproject.toml'), '[project]\nname = "hermes-agent"\n')
+    writeFileSync(join(fixtureRoot, 'runtime-manifest.json'), JSON.stringify({
+      schema: 2,
+      platform,
+      hermesAgentVersion: '0.20.0',
+      hermesSource: {
+        repository: 'https://github.com/NousResearch/hermes-agent.git',
+        ref: 'v2026.8.3',
+        commit: '3c27eb6234bf91b8ceee9e9071591b31e9b148cb',
+        installMethod: 'git',
+      },
+    }))
+    await tar.c({ cwd: fixtureRoot, file: archive, gzip: true }, ['.'])
+
+    const server = createServer((request, response) => {
+      if (request.url === `/hermes-0.20.0-runtime/${assetName}`) {
+        response.writeHead(200)
+        createReadStream(archive).pipe(response)
+        return
+      }
+      response.writeHead(404).end()
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+
+    try {
+      const address = server.address()
+      if (!address || typeof address === 'string') throw new Error('Test server did not bind to TCP')
+      process.env.HERMES_WEB_UI_DOWNLOAD_BASE_URL = `http://127.0.0.1:${address.port}`
+      vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+        const url = String(input)
+        if (url.endsWith(`hermes-runtime-${platform}.json`)) {
+          return new Response(JSON.stringify({
+            schema: 2,
+            platform,
+            hermesAgentVersion: '0.20.0',
+            asset: { name: assetName },
+          }), { status: 200 })
+        }
+        return new Response(JSON.stringify({ hermes: ['0.20.0'], webui: [] }), { status: 200 })
+      }))
+
+      const { downloadRuntimeVersion } = await import('../../packages/server/src/services/runtime-version-manager')
+      const installed = await downloadRuntimeVersion('0.20.0', 'cf')
+
+      expect(installed).toEqual(expect.objectContaining({
+        version: '0.20.0',
+        platform,
+        manifestHermesRuntimeVersion: '0.20.0',
+      }))
+      expect(installed.directory).toBe(join(
+        process.env.HERMES_WEB_UI_HOME!,
+        'desktop-runtime',
+        'hermes',
+        '0.20.0',
+        platform,
+      ))
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => err ? reject(err) : resolve()))
+    }
   })
 })

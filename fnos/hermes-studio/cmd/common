@@ -24,6 +24,7 @@ RUNTIME_ROOT="${APP_DIR}/runtime"
 RUNTIME_VERSION_VALUE="0.18.2"
 NODE_ROOT="$BUNDLED_NODE_ROOT"
 NODE_BIN="$BUNDLED_NODE_BIN"
+PYTHON_SOURCE_ROOT="$BUNDLED_PYTHON_HOME"
 PYTHON_HOME="$BUNDLED_PYTHON_HOME"
 PYTHON_BIN="${PYTHON_HOME}/bin/python3"
 HERMES_BIN_VALUE="${PYTHON_HOME}/bin/hermes"
@@ -108,11 +109,21 @@ try {
 ' "$ACTIVE_VERSION_FILE" "$field" "$allowed_root" "$(runtime_platform_key)"
 }
 
-runtime_dir_ready() {
+runtime_python_home() {
     local root="$1"
+    if [ -f "${root}/python/venv/bin/python3" ] && [ -f "${root}/python/venv/bin/hermes" ]; then
+        printf '%s\n' "${root}/python/venv"
+        return 0
+    fi
+    printf '%s\n' "${root}/python"
+}
+
+runtime_dir_ready() {
+    local root="$1" python_home
+    python_home="$(runtime_python_home "$root")"
     [ -n "$root" ] \
-        && [ -f "${root}/python/bin/python3" ] \
-        && [ -f "${root}/python/bin/hermes" ] \
+        && [ -f "${python_home}/bin/python3" ] \
+        && [ -f "${python_home}/bin/hermes" ] \
         && [ -f "${root}/node/bin/node" ] \
         && [ -f "${root}/runtime-manifest.json" ]
 }
@@ -171,7 +182,8 @@ apply_active_version_overrides() {
         RUNTIME_ROOT="$runtime_dir"
         NODE_ROOT="${runtime_dir}/node"
         NODE_BIN="${NODE_ROOT}/bin/node"
-        PYTHON_HOME="${runtime_dir}/python"
+        PYTHON_SOURCE_ROOT="${runtime_dir}/python"
+        PYTHON_HOME="$(runtime_python_home "$runtime_dir")"
         PYTHON_BIN="${PYTHON_HOME}/bin/python3"
         HERMES_BIN_VALUE="${PYTHON_HOME}/bin/hermes"
     fi
