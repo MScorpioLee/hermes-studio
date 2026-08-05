@@ -39,6 +39,11 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Setup compatible npm
+        run: |
+          npm install --global npm@11.17.0
+          npm --version
+
       - name: Install uv
         uses: astral-sh/setup-uv@v3
 

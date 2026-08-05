@@ -191,6 +191,10 @@ describe('fnOS package metadata', () => {
     expect(packageWorkflow.indexOf('uses: astral-sh/setup-uv@v3')).toBeLessThan(
       packageWorkflow.indexOf('name: Prepare bundled Hermes runtime'),
     )
+    expect(packageWorkflow).toContain('npm install --global npm@11.17.0')
+    expect(packageWorkflow.indexOf('npm install --global npm@11.17.0')).toBeLessThan(
+      packageWorkflow.indexOf('name: Prepare bundled Hermes runtime'),
+    )
   })
 
   it('automatically publishes only successfully built fnOS Web UI updates from upstream releases', () => {
