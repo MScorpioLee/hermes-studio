@@ -5,6 +5,7 @@ import { tmpdir } from 'os'
 
 let hermesHome = ''
 const mockResolveAuthorizedCredentials = vi.fn()
+const mockLoggerError = vi.fn()
 
 function writeHermesFile(path: string, content: string) {
   mkdirSync(hermesHome, { recursive: true })
@@ -55,7 +56,7 @@ async function loadModelsController() {
 async function loadCodexAuthController() {
   vi.resetModules()
   vi.doMock('../../packages/server/src/services/logger', () => ({
-    logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
+    logger: { info: vi.fn(), error: mockLoggerError, warn: vi.fn() },
   }))
   vi.doMock('../../packages/server/src/services/hermes/authorized-provider-credentials', () => ({
     resolveAuthorizedProviderRuntimeCredentials: mockResolveAuthorizedCredentials,
@@ -72,6 +73,7 @@ describe('OpenAI Codex credential pool auth compatibility', () => {
     writeConfigYaml('model:\n  default: gpt-5.5\n  provider: openai-codex\n')
     writeEnv('')
     mockResolveAuthorizedCredentials.mockReset()
+    mockLoggerError.mockReset()
   })
 
   afterEach(() => {
@@ -79,6 +81,8 @@ describe('OpenAI Codex credential pool auth compatibility', () => {
     vi.doUnmock('../../packages/server/src/services/hermes/copilot-models')
     vi.doUnmock('../../packages/server/src/services/logger')
     vi.doUnmock('../../packages/server/src/services/hermes/authorized-provider-credentials')
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
     delete process.env.HERMES_HOME
     delete process.env.HERMES_WEB_UI_HOME
     delete process.env.CODEX_HOME
@@ -185,5 +189,57 @@ describe('OpenAI Codex credential pool auth compatibility', () => {
     const auth = readAuthJson('profiles/research/auth.json')
     expect(auth.providers['openai-codex'].tokens.access_token).toBe('research-access-token')
     expect(auth.credential_pool['openai-codex'][0].access_token).toBe('research-access-token')
+  })
+
+  it('retries the device authorization request after a transient network failure', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new TypeError('fetch failed'), {
+        cause: Object.assign(new Error('socket disconnected'), { code: 'ECONNRESET' }),
+      }))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          user_code: 'ABCD-EFGH',
+          device_auth_id: 'deviceauth-test',
+        }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { start } = await loadCodexAuthController()
+    const ctx = makeCtx()
+    const startPromise = start(ctx)
+    await vi.advanceTimersByTimeAsync(500)
+    await startPromise
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(ctx.status).toBe(200)
+    expect(ctx.body).toEqual(expect.objectContaining({
+      user_code: 'ABCD-EFGH',
+      verification_url: 'https://auth.openai.com/codex/device',
+    }))
+  })
+
+  it('reports a diagnosable gateway error after device authorization network retries are exhausted', async () => {
+    vi.useFakeTimers()
+    const networkError = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('socket disconnected'), { code: 'ECONNRESET' }),
+    })
+    const fetchMock = vi.fn().mockRejectedValue(networkError)
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { start } = await loadCodexAuthController()
+    const ctx = makeCtx()
+    const startPromise = start(ctx)
+    await vi.runAllTimersAsync()
+    await startPromise
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(ctx.status).toBe(502)
+    expect(ctx.body).toEqual({
+      error: 'OpenAI authorization service is temporarily unreachable. Check the NAS network or proxy, then retry.',
+      code: 'codex_network_error',
+    })
+    expect(mockLoggerError).toHaveBeenCalledWith(networkError, 'OpenAI Codex device authorization request failed after retries')
   })
 })

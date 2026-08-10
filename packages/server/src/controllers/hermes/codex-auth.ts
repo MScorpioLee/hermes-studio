@@ -17,6 +17,7 @@ const CODEX_VERIFICATION_URL = 'https://auth.openai.com/codex/device'
 const CODEX_HOME = join(homedir(), '.codex')
 const POLL_MAX_DURATION = 15 * 60 * 1000
 const POLL_DEFAULT_INTERVAL = 5000
+const NETWORK_RETRY_DELAYS = [250, 750]
 
 // --- Session Store ---
 interface CodexSession {
@@ -27,6 +28,28 @@ interface CodexSession {
 }
 
 const sessions = new Map<string, CodexSession>()
+
+async function fetchWithNetworkRetry(
+  url: string,
+  init: Omit<RequestInit, 'signal'>,
+  timeoutMs: number,
+): Promise<Response> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= NETWORK_RETRY_DELAYS.length; attempt += 1) {
+    try {
+      return await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+    } catch (err) {
+      lastError = err
+      if (attempt >= NETWORK_RETRY_DELAYS.length) break
+      logger.warn(err, 'OpenAI Codex request failed; retrying (%d/%d)', attempt + 1, NETWORK_RETRY_DELAYS.length)
+      await new Promise(resolve => setTimeout(resolve, NETWORK_RETRY_DELAYS[attempt]))
+    }
+  }
+  throw lastError
+}
 
 function cleanupExpiredSessions() {
   const now = Date.now()
@@ -89,18 +112,16 @@ async function codexLoginWorker(session: CodexSession): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, interval))
     if (session.status !== 'pending') return
     try {
-      const pollRes = await fetch(CODEX_DEVICE_TOKEN_URL, {
+      const pollRes = await fetchWithNetworkRetry(CODEX_DEVICE_TOKEN_URL, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ device_auth_id: session.deviceAuthId, user_code: session.userCode }),
-        signal: AbortSignal.timeout(10000),
-      })
+      }, 10000)
       if (pollRes.status === 200) {
         const pollData = await pollRes.json() as { authorization_code: string; code_verifier: string }
-        const tokenRes = await fetch(CODEX_OAUTH_TOKEN_URL, {
+        const tokenRes = await fetchWithNetworkRetry(CODEX_OAUTH_TOKEN_URL, {
           method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ grant_type: 'authorization_code', code: pollData.authorization_code, redirect_uri: CODEX_REDIRECT_URI, client_id: CODEX_CLIENT_ID, code_verifier: pollData.code_verifier }).toString(),
-          signal: AbortSignal.timeout(15000),
-        })
+        }, 15000)
         if (!tokenRes.ok) { const errText = await tokenRes.text(); logger.error('Token exchange failed: %d %s', tokenRes.status, errText); session.status = 'error'; session.error = `Token exchange failed: ${tokenRes.status}`; return }
         const tokenData = await tokenRes.json() as { access_token: string; refresh_token?: string }
         const refreshToken = tokenData.refresh_token || ''
@@ -124,10 +145,21 @@ async function codexLoginWorker(session: CodexSession): Promise<void> {
 export async function start(ctx: any) {
   try {
     cleanupExpiredSessions()
-    const res = await fetch(CODEX_DEVICE_AUTH_URL, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'node-fetch' },
-      body: JSON.stringify({ client_id: CODEX_CLIENT_ID }), signal: AbortSignal.timeout(10000),
-    })
+    let res: Response
+    try {
+      res = await fetchWithNetworkRetry(CODEX_DEVICE_AUTH_URL, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'node-fetch' },
+        body: JSON.stringify({ client_id: CODEX_CLIENT_ID }),
+      }, 10000)
+    } catch (err) {
+      logger.error(err, 'OpenAI Codex device authorization request failed after retries')
+      ctx.status = 502
+      ctx.body = {
+        error: 'OpenAI authorization service is temporarily unreachable. Check the NAS network or proxy, then retry.',
+        code: 'codex_network_error',
+      }
+      return
+    }
     if (!res.ok) {
       let errorBody: any = null; try { errorBody = await res.json() } catch { }
       logger.error('Device code request failed: %d %s', res.status, errorBody)
@@ -142,6 +174,7 @@ export async function start(ctx: any) {
     codexLoginWorker(session).catch(err => { logger.error(err, 'Worker error'); session.status = 'error'; session.error = err.message })
     ctx.body = { session_id: sessionId, user_code: data.user_code, verification_url: CODEX_VERIFICATION_URL, expires_in: 900 }
   } catch (err: any) {
+    logger.error(err, 'OpenAI Codex login start failed')
     ctx.status = 500; ctx.body = { error: err.message }
   }
 }
