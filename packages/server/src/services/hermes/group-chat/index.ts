@@ -1730,8 +1730,10 @@ export class GroupChatServer {
 
     private handleTyping(socket: Socket, data: { roomId?: string }): void {
         const roomId = data.roomId || 'general'
-        const userId = this.socketUserMap.get(socket.id) || socket.id
-        const userName = this.userInfoMap.get(userId)?.name || `User-${socket.id.slice(0, 6)}`
+        const joined = this.getOnlineRoomMember(socket, roomId)
+        if (!joined) return
+        const userId = joined.member.userId
+        const userName = joined.member.name
 
         // Track typing state for rejoin recovery
         let roomTyping = this.typingState.get(roomId)
@@ -1758,7 +1760,9 @@ export class GroupChatServer {
 
     private handleStopTyping(socket: Socket, data: { roomId?: string }): void {
         const roomId = data.roomId || 'general'
-        const userId = this.socketUserMap.get(socket.id) || socket.id
+        const joined = this.getOnlineRoomMember(socket, roomId)
+        if (!joined) return
+        const userId = joined.member.userId
 
         // Remove from typing state
         const roomTyping = this.typingState.get(roomId)
@@ -1919,6 +1923,10 @@ export class GroupChatServer {
                 clearTimeout(entry.timer)
                 roomTyping.delete(userId || socketId)
                 if (roomTyping.size === 0) this.typingState.delete(roomId)
+                this.nsp.to(roomId).emit('stop_typing', {
+                    roomId,
+                    userId: userId || socketId,
+                })
             }
         }
 

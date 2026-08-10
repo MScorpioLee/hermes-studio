@@ -33,6 +33,8 @@ import { authenticateUserToken, isAuthEnabled, type AuthenticatedUser } from '..
 import { userCanAccessProfile } from '../../../db/hermes/users-store'
 import { observeRunChatPetEvent } from '../pet-state-socket'
 import { codingAgentRunManager } from '../../agent-runner/coding-agent-run-manager'
+import { respondToEkkoToolApproval } from '../../ekko-agent/approvals'
+import { respondToEkkoClarification } from '../../ekko-agent/clarifications'
 
 export type { ContentBlock } from './types'
 
@@ -446,6 +448,23 @@ export class ChatRunSocket {
 
     socket.on('approval.respond', async (data: { session_id?: string; approval_id?: string; choice?: string }) => {
       if (!data.session_id || !data.approval_id) return
+      const ekkoResult = respondToEkkoToolApproval(
+        data.session_id,
+        data.approval_id,
+        data.choice,
+      )
+      if (ekkoResult.handled) {
+        if (!ekkoResult.resolved) {
+          this.emitToSession(socket, data.session_id, 'approval.resolved', {
+            event: 'approval.resolved',
+            approval_id: data.approval_id,
+            choice: ekkoResult.choice,
+            resolved: false,
+            error: 'Approval does not belong to this session.',
+          })
+        }
+        return
+      }
       try {
         const result = await this.bridge.approvalRespond(data.approval_id, data.choice || 'deny')
         this.emitToSession(socket, data.session_id, 'approval.resolved', {
@@ -468,6 +487,22 @@ export class ChatRunSocket {
     socket.on('clarify.respond', async (data: { session_id?: string; clarify_id?: string; response?: string }) => {
       if (!data.session_id || !data.clarify_id) return
       this.clearClarifyEventState(data.session_id, data.clarify_id)
+      const ekkoResult = respondToEkkoClarification(
+        data.session_id,
+        data.clarify_id,
+        data.response,
+      )
+      if (ekkoResult.handled) {
+        if (!ekkoResult.resolved) {
+          this.emitToSession(socket, data.session_id, 'clarify.resolved', {
+            event: 'clarify.resolved',
+            clarify_id: data.clarify_id,
+            resolved: false,
+            error: 'Clarification does not belong to this session.',
+          })
+        }
+        return
+      }
       try {
         const result = await this.bridge.clarifyRespond(data.clarify_id, data.response || '')
         this.emitToSession(socket, data.session_id, 'clarify.resolved', {

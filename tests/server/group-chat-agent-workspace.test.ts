@@ -200,10 +200,11 @@ describe('group chat agent workspace bridge runs', () => {
         name: 'read_file',
         arguments: { path: '/tmp/file.txt' },
       })
-      options.onEvent?.('tool.completed', {
+      options.onEvent?.('tool.failed', {
         tool_call_id: 'tool-2',
         name: 'read_file',
-        output: 'contents',
+        output: 'permission denied',
+        error: 'permission denied',
       })
       options.onEvent?.('message.delta', { delta: 'Codex answer' })
       return { ok: true, output: 'Codex answer', reasoning: 'thinkingnext thought' }
@@ -284,6 +285,7 @@ describe('group chat agent workspace bridge runs', () => {
       profile: 'research',
       onEvent: expect.any(Function),
     }))
+    expect(runAndWait.mock.calls[0][1]).not.toHaveProperty('timeoutMs')
     expect(String(runAndWait.mock.calls[0][0].input)).toContain('截至总结锚点的群聊总结')
     expect(String(runAndWait.mock.calls[0][0].input)).toContain('Keep single chat unchanged.')
     expect(runAndWait.mock.calls[0][0].instructions).toContain('你是"Coder"，群聊房间"Engineering Room"中的 AI 助手')
@@ -297,6 +299,18 @@ describe('group chat agent workspace bridge runs', () => {
         roomId: 'room-1',
         content: 'Codex answer',
         reasoning: null,
+      }),
+      expect.any(Function),
+    )
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      'message',
+      expect.objectContaining({
+        roomId: 'room-1',
+        role: 'tool',
+        tool_call_id: 'tool-2',
+        tool_name: 'read_file',
+        content: 'permission denied',
+        finish_reason: 'error',
       }),
       expect.any(Function),
     )
@@ -383,6 +397,7 @@ describe('group chat agent workspace bridge runs', () => {
     })
 
     const runData = runAndWait.mock.calls[0][0]
+    expect(runAndWait.mock.calls[0][1]).not.toHaveProperty('timeoutMs')
     expect(runData.coding_agent_id).toBe(codingAgentId)
     expect(runData.instructions).toContain(`你是"${agent === 'ekko' ? 'Ekko' : 'Claude'}"，群聊房间"Runtime Room"中的 AI 助手`)
     expect(runData.instructions).toContain('- Human: Room owner')

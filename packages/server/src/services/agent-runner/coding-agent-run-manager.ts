@@ -152,20 +152,8 @@ function isProxyToolEvent(event: CanonicalResponsesEvent): boolean {
   const data: any = event.data || {}
   const item = data.item || data.output_item || data
   return event.type === 'response.function_call_arguments.delta' ||
-    ((event.type === 'response.output_item.added' || event.type === 'response.output_item.done') && item?.type === 'function_call')
-}
-
-function isCodexProxyExecToolEvent(event: CanonicalResponsesEvent): boolean {
-  const data: any = event.data || {}
-  const item = data.item || data.output_item || data
-  if (
-    (event.type !== 'response.output_item.added' && event.type !== 'response.output_item.done') ||
-    item?.type !== 'function_call'
-  ) {
-    return false
-  }
-  const name = String(item.name || item.function?.name || '').trim()
-  return name === 'exec_command' || name === 'functions.exec_command'
+    ((event.type === 'response.output_item.added' || event.type === 'response.output_item.done') &&
+      (item?.type === 'function_call' || item?.type === 'function_call_output'))
 }
 
 function truncateCodingAgentToolOutputForStorage(output: unknown): string {
@@ -663,26 +651,43 @@ export class CodingAgentRunManager {
     if (!agentSessionId) return
     const run = this.runs.get(agentSessionId)
     if (!run) return
-    if (run.launch.agentId === 'codex' && isCodexProxyExecToolEvent(event)) return
     const responseEvent = this.normalizeCodexChatTextEvent(run, event)
     if (!responseEvent) return
     const storageSafeResponseEvent = truncateCodingAgentToolOutputEvent(responseEvent)
     if (run.launch.agentId === 'claude-code' && !run.acceptingPrintEvent) {
       if (run.terminalEventHandled) return
-      if (run.currentChild && !isProxyToolEvent(event)) return
+      // Claude's stream-json process reports tool_use/tool_result itself.
+      // Proxy Responses events describe the same calls with different ids and
+      // may omit the matching function_call_output, so accepting both sources
+      // creates duplicate tool cards that remain pending until run completion.
+      if (run.currentChild) return
+    }
+    if (
+      run.launch.agentId === 'codex' &&
+      !run.acceptingPrintEvent &&
+      isProxyToolEvent(storageSafeResponseEvent)
+    ) {
+      // Keep proxy text deltas for responsive streaming, but use Codex JSONL as
+      // the sole source of tool lifecycle events. The two streams use different
+      // ids for the same call, so combining them creates duplicate tool cards.
+      return
     }
     if (storageSafeResponseEvent.type === 'response.created') {
       if (run.responseStartEmitted) return
       run.responseStartEmitted = true
     }
     const isTerminalEvent = storageSafeResponseEvent.type === 'response.completed' || storageSafeResponseEvent.type === 'response.failed'
+    const deferCodexProxyTerminal = storageSafeResponseEvent.type === 'response.completed' ||
+      (storageSafeResponseEvent.type === 'response.failed' && !run.acceptingPrintEvent)
     if (
       run.launch.agentId === 'codex' &&
-      storageSafeResponseEvent.type === 'response.completed' &&
+      deferCodexProxyTerminal &&
       childIsRunning(run.currentChild)
     ) {
-      const final = (storageSafeResponseEvent.data as any).response || storageSafeResponseEvent.data
-      run.codexPendingUsage = final?.usage ?? run.codexPendingUsage
+      if (storageSafeResponseEvent.type === 'response.completed') {
+        const final = (storageSafeResponseEvent.data as any).response || storageSafeResponseEvent.data
+        run.codexPendingUsage = final?.usage ?? run.codexPendingUsage
+      }
       return
     }
     if (isTerminalEvent) {
@@ -915,18 +920,19 @@ export class CodingAgentRunManager {
     const promptArgument = hasArg(run.launch.args, '--append-system-prompt-file')
       ? ''
       : normalizeCliPromptArgument(systemPrompt)
-    const streamInput = images.length > 0 ? buildClaudeStreamJsonInput(input, images) : ''
+    const inputFormat = images.length > 0 ? 'stream-json' : 'text'
+    const stdinInput = images.length > 0 ? buildClaudeStreamJsonInput(input, images) : input
     const args = [
       ...run.launch.args,
       ...nativeSessionArgs,
       ...(promptArgument ? ['--append-system-prompt', promptArgument] : []),
       '-p',
-      ...(streamInput ? ['--input-format', 'stream-json'] : []),
+      '--input-format',
+      inputFormat,
       '--output-format',
       'stream-json',
       '--include-partial-messages',
       '--verbose',
-      ...(streamInput ? [] : [input]),
     ]
     const child = spawnCodingAgentChild(run.launch.command, args, {
       cwd: existsSync(run.launch.workspaceDir) ? run.launch.workspaceDir : homedir(),
@@ -934,7 +940,7 @@ export class CodingAgentRunManager {
         ...process.env,
         ...(run.launch.env || {}),
       },
-      pipeStdin: Boolean(streamInput),
+      pipeStdin: true,
     })
     run.currentChild = child
 
@@ -953,11 +959,11 @@ export class CodingAgentRunManager {
       if (text) logger.debug({ runId: run.id, sessionId: run.launch.sessionId, text }, '[coding-agent-run] claude print stderr')
     })
 
-    if (streamInput && child.stdin) {
+    if (child.stdin) {
       child.stdin.on('error', (err) => {
-        logger.warn({ err, runId: run.id, sessionId: run.launch.sessionId }, '[coding-agent-run] claude stream input failed')
+        logger.warn({ err, runId: run.id, sessionId: run.launch.sessionId }, '[coding-agent-run] claude stdin input failed')
       })
-      child.stdin.end(`${streamInput}\n`)
+      child.stdin.end(`${stdinInput}\n`)
     }
 
     child.on('error', (err) => {
@@ -1378,8 +1384,8 @@ export class CodingAgentRunManager {
       '--dangerously-bypass-approvals-and-sandbox',
     ]
     const args = run.launch.agentNativeSessionId && run.nativeResumeReady
-      ? ['exec', 'resume', ...commonArgs, run.launch.agentNativeSessionId, input]
-      : ['exec', ...commonArgs, '--cd', run.launch.workspaceDir, input]
+      ? ['exec', 'resume', ...commonArgs, run.launch.agentNativeSessionId, '-']
+      : ['exec', ...commonArgs, '--cd', run.launch.workspaceDir, '-']
 
     const child = spawnCodingAgentChild(run.launch.command, args, {
       cwd: existsSync(run.launch.workspaceDir) ? run.launch.workspaceDir : homedir(),
@@ -1387,6 +1393,7 @@ export class CodingAgentRunManager {
         ...process.env,
         ...(run.launch.env || {}),
       },
+      pipeStdin: true,
     })
     run.currentChild = child
 
@@ -1404,6 +1411,13 @@ export class CodingAgentRunManager {
       const text = appendChildStderr(run, chunk)
       if (text) logger.debug({ runId: run.id, sessionId: run.launch.sessionId, text }, '[coding-agent-run] codex exec stderr')
     })
+
+    if (child.stdin) {
+      child.stdin.on('error', (err) => {
+        logger.warn({ err, runId: run.id, sessionId: run.launch.sessionId }, '[coding-agent-run] codex stdin input failed')
+      })
+      child.stdin.end(`${input}\n`)
+    }
 
     child.on('error', (err) => {
       if (run.currentChildKillTimer) clearTimeout(run.currentChildKillTimer)
