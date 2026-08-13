@@ -1496,6 +1496,79 @@ os.environ.pop("HERMES_AGENT_BRIDGE_WORKER_PORT_BASE", None)
 `)
   })
 
+  it('retires a stale TCP profile worker before spawning its replacement', () => {
+    runPython(String.raw`
+${harness}
+
+import socket
+
+listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+listener.bind(("127.0.0.1", 0))
+listener.listen(4)
+port = listener.getsockname()[1]
+stopped = threading.Event()
+
+def serve_stale_worker():
+    try:
+        while not stopped.is_set():
+            conn, _addr = listener.accept()
+            try:
+                request = json.loads(conn.recv(65536).split(b"\n", 1)[0].decode("utf-8"))
+                if request.get("action") == "ping":
+                    conn.sendall(b'{"ok":true,"pong":true,"profile":"default","pid":9876}\n')
+                elif request.get("action") == "shutdown":
+                    conn.sendall(b'{"ok":true,"shutdown":true}\n')
+                    stopped.set()
+            finally:
+                conn.close()
+    finally:
+        listener.close()
+
+thread = threading.Thread(target=serve_stale_worker, daemon=True)
+thread.start()
+
+created = []
+original_popen = bridge.subprocess.Popen
+
+class FakeProcess:
+    pid = 12345
+    stdout = None
+    stderr = None
+
+    def poll(self):
+        return None
+
+def fake_popen(*args, **kwargs):
+    assert stopped.is_set(), "stale endpoint was not retired before spawn"
+    created.append((args, kwargs))
+    return FakeProcess()
+
+worker = bridge.WorkerProcess(
+    "default",
+    "default",
+    f"tcp://127.0.0.1:{port}",
+    "/agent",
+    "/home",
+)
+worker._pipe_stderr = lambda: None
+worker._wait_ready = lambda: None
+try:
+    bridge.subprocess.Popen = fake_popen
+    worker.start()
+finally:
+    bridge.subprocess.Popen = original_popen
+    stopped.set()
+    try:
+        listener.close()
+    except OSError:
+        pass
+    thread.join(timeout=2)
+
+assert len(created) == 1, created
+`)
+  })
+
   it('restores approval env and clears handlers when a run fails', () => {
     runPython(String.raw`
 ${harness}

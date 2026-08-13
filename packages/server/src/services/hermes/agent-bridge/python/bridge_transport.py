@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import locale
@@ -64,6 +65,7 @@ class WorkerProcess:
                 "HERMES_AGENT_BRIDGE_BROKER_PID": str(os.getpid()),
             }
             env.pop("ANTHROPIC_AUTH_TOKEN", None)
+            _retire_stale_worker_endpoint(self.endpoint, self.profile)
             self.process = subprocess.Popen(
                 args,
                 env=env,
@@ -230,6 +232,58 @@ def _send_bridge_request(endpoint: str, req: dict[str, Any], timeout: float) -> 
             sock.close()
         except OSError:
             pass
+
+
+def _endpoint_is_unavailable_error(exc: BaseException) -> bool:
+    if isinstance(exc, (FileNotFoundError, ConnectionRefusedError)):
+        return True
+    return isinstance(exc, OSError) and exc.errno in {
+        errno.ENOENT,
+        errno.ECONNREFUSED,
+        errno.ECONNRESET,
+        errno.ENOTCONN,
+    }
+
+
+def _retire_stale_worker_endpoint(endpoint: str, profile: str) -> None:
+    try:
+        ping = _send_bridge_request(endpoint, {"action": "ping"}, 1)
+    except Exception as exc:
+        if _endpoint_is_unavailable_error(exc):
+            return
+        raise RuntimeError(f"worker endpoint is occupied by an incompatible service: {endpoint}: {exc}") from exc
+
+    endpoint_profile = str(ping.get("profile") or "").strip()
+    if not ping.get("pong") or endpoint_profile != (profile or "default"):
+        raise RuntimeError(
+            f"worker endpoint is occupied by an unexpected service: {endpoint} "
+            f"(profile={endpoint_profile or 'unknown'})"
+        )
+
+    print(
+        f"[hermes-bridge-worker:{profile or 'default'}] retiring stale worker "
+        f"pid={ping.get('pid') or 'unknown'} endpoint={endpoint}",
+        file=sys.stderr,
+        flush=True,
+    )
+    try:
+        _send_bridge_request(endpoint, {"action": "shutdown"}, 5)
+    except Exception as exc:
+        if not _endpoint_is_unavailable_error(exc):
+            raise RuntimeError(f"stale worker did not accept shutdown: {endpoint}: {exc}") from exc
+
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        try:
+            sock = _connect_bridge_socket(endpoint, 0.2)
+        except Exception as exc:
+            if _endpoint_is_unavailable_error(exc):
+                return
+            raise RuntimeError(f"failed while waiting for stale worker shutdown: {endpoint}: {exc}") from exc
+        else:
+            sock.close()
+        time.sleep(0.05)
+    raise RuntimeError(f"stale worker endpoint did not stop: {endpoint}")
 
 
 def _tcp_endpoint_port(endpoint: str) -> int | None:
