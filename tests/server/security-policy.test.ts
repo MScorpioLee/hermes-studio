@@ -99,4 +99,31 @@ describe('server security policy', () => {
       else process.env.HERMES_WEB_UI_PUBLIC_BASE_PATH = previousBasePath
     }
   })
+
+  it('preserves the opener only for the dedicated group chat Agent authorization document', async () => {
+    const app = new Koa()
+    app.use(securityHeaders())
+    app.use((ctx) => {
+      ctx.body = '<!doctype html>'
+    })
+    const server = app.listen(0)
+    servers.push(server)
+    await new Promise<void>((resolve) => server.once('listening', () => resolve()))
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('expected tcp server')
+
+    const authorizationDocument = await fetch(
+      `http://127.0.0.1:${address.port}/?groupChatAgentLink=1`,
+    )
+    const unrelatedPath = await fetch(
+      `http://127.0.0.1:${address.port}/health?groupChatAgentLink=1`,
+    )
+    const unrelatedQuery = await fetch(
+      `http://127.0.0.1:${address.port}/?groupChatAgentLink=unexpected`,
+    )
+
+    expect(authorizationDocument.headers.get('cross-origin-opener-policy')).toBe('unsafe-none')
+    expect(unrelatedPath.headers.get('cross-origin-opener-policy')).toBe('same-origin-allow-popups')
+    expect(unrelatedQuery.headers.get('cross-origin-opener-policy')).toBe('same-origin-allow-popups')
+  })
 })

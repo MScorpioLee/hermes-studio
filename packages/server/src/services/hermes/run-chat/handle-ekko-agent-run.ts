@@ -18,6 +18,11 @@ import {
   type ModelRequest,
   type ModelResponse,
 } from '../../../../../ekko-agent/src'
+import {
+  agentReasoningText,
+  normalizeAgentReasoning,
+  serializeAgentReasoningDetails,
+} from '../../../../../ekko-agent/src/model/messages'
 import { getGlobalEkkoAgent } from '../../ekko-agent/manager'
 import { waitForEkkoToolApproval } from '../../ekko-agent/approvals'
 import { waitForEkkoClarification } from '../../ekko-agent/clarifications'
@@ -60,7 +65,7 @@ export interface EkkoAgentRunSocketData {
   workspace?: string | null
   category_id?: number | null
   source?: string
-  session_source?: 'global_agent' | 'workflow'
+  session_source?: 'global_agent' | 'workflow' | 'group_chat'
   context_compression_enabled?: boolean
   baseUrl?: string
   base_url?: string
@@ -243,10 +248,13 @@ async function toAgentMessages(messages: Array<ChatMessage | SessionState['messa
       const agentMessage: AgentMessage = {
         role: 'assistant',
         content: contentBlocksToString(message.content as any),
-        reasoning: ('reasoning' in message ? message.reasoning : undefined) || message.reasoning_content || undefined,
+        reasoning: normalizeAgentReasoning(
+          ('reasoning' in message ? message.reasoning : undefined) || message.reasoning_content,
+          'reasoning_details' in message ? message.reasoning_details : undefined,
+        ),
         toolCalls,
       }
-      if (agentMessage.content.trim() || (agentMessage.reasoning?.trim().length ?? 0) > 0 || toolCalls?.length) {
+      if (agentMessage.content.trim() || agentReasoningText(agentMessage.reasoning).trim() || agentMessage.reasoning?.native || toolCalls?.length) {
         result.push(agentMessage)
       }
       continue
@@ -398,7 +406,11 @@ export async function handleEkkoAgentRun(
   state.isWorking = true
   state.isAborting = false
   state.profile = profile
-  state.source = data.source === 'workflow' ? 'workflow' : 'coding_agent'
+  state.source = data.session_source === 'group_chat' || data.source === 'group_chat'
+    ? 'group_chat'
+    : data.session_source === 'workflow' || data.source === 'workflow'
+      ? 'workflow'
+      : 'coding_agent'
   state.events = []
   const abortController = new AbortController()
   state.abortController = abortController
@@ -445,9 +457,11 @@ export async function handleEkkoAgentRun(
     : []
   const sessionSource = data.session_source === 'global_agent'
     ? 'global_agent'
-    : data.session_source === 'workflow' || data.source === 'workflow'
-      ? 'workflow'
-      : 'coding_agent'
+    : data.session_source === 'group_chat' || data.source === 'group_chat'
+      ? 'group_chat'
+      : data.session_source === 'workflow' || data.source === 'workflow'
+        ? 'workflow'
+        : 'coding_agent'
   const emit = (event: string, payload: any) => {
     const tagged = { ...payload, session_id: sessionId }
     observeRunChatPetEvent(profile, event, tagged)
@@ -516,6 +530,15 @@ export async function handleEkkoAgentRun(
       session_id: sessionId,
       role,
       content: storageText,
+      timestamp: now,
+    })
+    data.onEvent?.('message.created', {
+      event: 'message.created',
+      session_id: sessionId,
+      queue_id: data.queue_id,
+      message_id: messageId,
+      role,
+      content: displayText,
       timestamp: now,
     })
     state.messages.push({
@@ -726,6 +749,8 @@ export async function handleEkkoAgentRun(
     if (!toolCalls.length || toolCalls.some(call => !group.results.has(call.id))) return false
     const timestamp = Math.floor(Date.now() / 1000)
     const storedToolCalls = toolCalls.map(toStoredToolCall)
+    const reasoningText = agentReasoningText(group.message.reasoning)
+    const reasoningDetails = serializeAgentReasoningDetails(group.message.reasoning)
     const rows = [
       {
         session_id: sessionId,
@@ -734,8 +759,9 @@ export async function handleEkkoAgentRun(
         tool_calls: storedToolCalls,
         timestamp,
         finish_reason: 'tool_calls',
-        reasoning: group.message.reasoning || null,
-        reasoning_content: group.message.reasoning || null,
+        reasoning: reasoningText || null,
+        reasoning_details: reasoningDetails,
+        reasoning_content: reasoningText || null,
       },
       ...toolCalls.map((toolCall) => {
         const completed = group.results.get(toolCall.id)!
@@ -1295,6 +1321,8 @@ export async function handleEkkoAgentRun(
         if (!unpersistedToolCalls.length) continue
         const toolCalls = unpersistedToolCalls.map(toStoredToolCall)
         const timestamp = Math.floor(Date.now() / 1000)
+        const reasoningText = agentReasoningText(step.message.reasoning)
+        const reasoningDetails = serializeAgentReasoningDetails(step.message.reasoning)
         const assistantId = addMessage({
           session_id: sessionId,
           role: 'assistant',
@@ -1302,8 +1330,9 @@ export async function handleEkkoAgentRun(
           tool_calls: toolCalls,
           timestamp,
           finish_reason: 'tool_calls',
-          reasoning: step.message.reasoning || null,
-          reasoning_content: step.message.reasoning || null,
+          reasoning: reasoningText || null,
+          reasoning_details: reasoningDetails,
+          reasoning_content: reasoningText || null,
         })
         if (assistantId != null) assistantMessageId = String(assistantId)
         state.messages.push({
@@ -1314,8 +1343,9 @@ export async function handleEkkoAgentRun(
           tool_calls: toolCalls,
           timestamp,
           finish_reason: 'tool_calls',
-          reasoning: step.message.reasoning || null,
-          reasoning_content: step.message.reasoning || null,
+          reasoning: reasoningText || null,
+          reasoning_details: reasoningDetails,
+          reasoning_content: reasoningText || null,
         })
       } else if (step.type === 'tool') {
         if (persistedToolCallIds.has(step.toolCallId)) continue
@@ -1341,7 +1371,7 @@ export async function handleEkkoAgentRun(
         })
       }
     }
-    assistantReasoning = result.output.reasoning || assistantReasoning
+    assistantReasoning = agentReasoningText(result.output.reasoning) || assistantReasoning
     const hadToolActivity = result.steps.some(step => step.type === 'tool')
     if (!assistantText.trim() && !assistantReasoning.trim() && !hadToolActivity) {
       const error = 'Model provider returned an empty response after streaming and non-streaming attempts.'
@@ -1374,6 +1404,7 @@ export async function handleEkkoAgentRun(
       return
     }
     if (assistantText.trim() || assistantReasoning.trim()) {
+      const reasoningDetails = serializeAgentReasoningDetails(result.output.reasoning)
       const assistantId = addMessage({
         session_id: sessionId,
         role: 'assistant',
@@ -1381,6 +1412,7 @@ export async function handleEkkoAgentRun(
         timestamp: Math.floor(Date.now() / 1000),
         finish_reason: result.output.finishReason || null,
         reasoning: assistantReasoning || null,
+        reasoning_details: reasoningDetails,
         reasoning_content: assistantReasoning || null,
       })
       if (assistantId != null) assistantMessageId = String(assistantId)
@@ -1392,6 +1424,7 @@ export async function handleEkkoAgentRun(
         timestamp: Math.floor(Date.now() / 1000),
         finish_reason: result.output.finishReason || null,
         reasoning: assistantReasoning || null,
+        reasoning_details: reasoningDetails,
         reasoning_content: assistantReasoning || null,
       })
     }
@@ -1431,6 +1464,7 @@ export async function handleEkkoAgentRun(
     emit('run.completed', {
       event: 'run.completed',
       run_id: runId || result.runId,
+      message_id: assistantMessageId || undefined,
       output: assistantText,
       context: result.context,
       contextTokens: contextEstimate?.contextTokens,

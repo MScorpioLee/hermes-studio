@@ -20,6 +20,7 @@ import ModelSettings from "@/components/hermes/settings/ModelSettings.vue";
 import AccountSettings from "@/components/hermes/settings/AccountSettings.vue";
 import UserManagementSettings from "@/components/hermes/settings/UserManagementSettings.vue";
 import NativeUpdateSettings from "@/components/hermes/settings/NativeUpdateSettings.vue";
+import WebhookSettings from "@/components/hermes/settings/WebhookSettings.vue";
 import { isStoredSuperAdmin } from "@/api/client";
 import { useProfilesStore } from "@/stores/hermes/profiles";
 
@@ -34,6 +35,7 @@ const activeTab = ref("account");
 const validTabs = computed(() => new Set([
   "account",
   ...(canManageUsers ? ["users"] : []),
+  ...(canManageUsers ? ["webhooks"] : []),
   "display",
   "proxy",
   "agent",
@@ -104,6 +106,9 @@ onMounted(() => {
           </NTabPane>
           <NTabPane v-if="canManageUsers" name="users" :tab="t('settings.tabs.users')">
             <UserManagementSettings />
+          </NTabPane>
+          <NTabPane v-if="canManageUsers" name="webhooks" :tab="t('settings.tabs.webhooks')">
+            <WebhookSettings />
           </NTabPane>
           <NTabPane name="display" :tab="t('settings.tabs.display')">
             <DisplaySettings />

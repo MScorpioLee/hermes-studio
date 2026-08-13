@@ -220,6 +220,10 @@ async function refreshAgentBridgeHealth(): Promise<AgentBridgeHealthPayload> {
   }
 }
 
+export function livenessCheck(ctx: any) {
+  ctx.body = { status: 'ok' }
+}
+
 export async function healthCheck(ctx: any) {
   const hermesVersion = await getHermesAgentRuntimeVersion()
   const agentBridge = await getAgentBridgeHealth()

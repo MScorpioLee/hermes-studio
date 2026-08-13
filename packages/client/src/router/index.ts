@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { hasApiKey, isStoredSuperAdmin } from '@/api/client'
 import { hasDesktopBrowserBridge } from '@/utils/desktop-bridge'
+import { resolveLoginRedirect } from '@/utils/login-redirect'
 
 const versionPreviewDisabled = import.meta.env.VITE_HERMES_DISABLE_VERSION_PREVIEW === '1'
 
@@ -30,6 +31,18 @@ const router = createRouter({
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
       meta: { public: true },
+    },
+    {
+      path: '/share/group-chat/:inviteCode?',
+      name: 'share.groupChat',
+      component: () => import('@/views/hermes/SharedGroupChatView.vue'),
+      meta: { public: true, standaloneChat: true, inviteOnly: true },
+    },
+    {
+      path: '/group-chat-link',
+      name: 'groupChat.link',
+      component: () => import('@/views/hermes/GroupChatLinkView.vue'),
+      meta: { standaloneChat: true },
     },
     {
       path: '/hermes/chat',
@@ -228,7 +241,7 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.public) {
     // Already has key, skip login
     if (to.name === 'login' && hasApiKey() && !isDesktopShell()) {
-      next({ path: '/hermes/chat' })
+      next(resolveLoginRedirect(to.query.redirect))
       return
     }
     next()
@@ -237,7 +250,7 @@ router.beforeEach(async (to, _from, next) => {
 
   // All other pages require token
   if (!hasApiKey()) {
-    next({ name: 'login' })
+    next({ name: 'login', query: { redirect: to.fullPath } })
     return
   }
 

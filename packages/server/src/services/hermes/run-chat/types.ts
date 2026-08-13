@@ -40,10 +40,12 @@ export interface QueuedRun {
   groupSystemPrompt?: string
   groupRoomId?: string
   groupAgentId?: string
+  workflowId?: string
+  workflowNodeId?: string
   profile: string
   workspace?: string | null
   source?: ChatRunSource
-  sessionSource?: 'global_agent' | 'workflow'
+  sessionSource?: 'global_agent' | 'workflow' | 'group_chat'
   codingAgentId?: ChatCodingAgentId
   agentId?: ChatCodingAgentId
   mode?: 'scoped' | 'global'
@@ -95,6 +97,10 @@ export interface SessionState {
   queue: QueuedRun[]
   responseRun?: ResponseRunState
   source?: ChatRunSource
+  webhookAgent?: 'bridge' | 'ekko' | 'claude-code' | 'codex'
+  webhookRoomId?: string
+  webhookWorkflowId?: string
+  webhookWorkflowNodeId?: string
   bridgePendingAssistantContent?: string
   bridgeAssistantMessageId?: string
   bridgePendingReasoningContent?: string
@@ -136,7 +142,7 @@ export interface BridgeContextState {
   workspace?: string
 }
 
-export type ChatRunSource = 'api_server' | 'cli' | 'coding_agent' | 'global_agent' | 'workflow'
+export type ChatRunSource = 'api_server' | 'cli' | 'coding_agent' | 'global_agent' | 'workflow' | 'group_chat'
 export type ChatCodingAgentId = 'claude-code' | 'codex' | 'ekko-agent'
 
 export interface BridgeCompressionResult {

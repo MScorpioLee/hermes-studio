@@ -43,8 +43,9 @@ async function loadHealthController(options: LoadHealthControllerOptions = {}) {
     delete (globalThis as any).__APP_VERSION__
   }
 
+  const getVersion = vi.fn().mockResolvedValue('Hermes Agent v0.11.0\n')
   vi.doMock('../../packages/server/src/services/hermes/hermes-cli', () => ({
-    getVersion: vi.fn().mockResolvedValue('Hermes Agent v0.11.0\n'),
+    getVersion,
   }))
 
   const checkReadiness = options.bridgeReadinessError
@@ -76,6 +77,7 @@ async function loadHealthController(options: LoadHealthControllerOptions = {}) {
 
   return {
     ...health,
+    getVersion,
     getAgentBridgeManager,
     checkReadiness,
     getRuntimeState,
@@ -95,6 +97,24 @@ function createMockCtx() {
     body: null as any,
   }
 }
+
+describe('liveness controller', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.resetModules()
+  })
+
+  it('returns a static ok response without probing Hermes or Agent Bridge', async () => {
+    const { livenessCheck, getVersion, getAgentBridgeManager } = await loadHealthControllerWithoutInjectedVersion()
+    const ctx = createMockCtx()
+
+    livenessCheck(ctx)
+
+    expect(ctx.body).toEqual({ status: 'ok' })
+    expect(getVersion).not.toHaveBeenCalled()
+    expect(getAgentBridgeManager).not.toHaveBeenCalled()
+  })
+})
 
 describe('health controller version metadata', () => {
   afterEach(() => {
