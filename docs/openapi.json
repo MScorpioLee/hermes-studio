@@ -4569,6 +4569,32 @@
         }
       }
     },
+    "/api/hermes/fnos/update": {
+      "get": {
+        "tags": [
+          "Update"
+        ],
+        "summary": "Get update",
+        "description": "GET /api/hermes/fnos/update",
+        "operationId": "fnosUpdateStatus",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
     "/api/hermes/group-chat-link/v1/agents": {
       "get": {
         "tags": [
