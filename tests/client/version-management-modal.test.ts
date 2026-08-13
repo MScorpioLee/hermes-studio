@@ -103,10 +103,9 @@ describe('VersionManagementModal Runtime storage selector', () => {
     expect(runtimeDirectory.text()).toContain('/state/desktop-runtime/hermes/0.18.0/mac-arm64')
   })
 
-  it('shows the Runtime fallback reason and hides Web UI version switching', async () => {
+  it('shows the Runtime fallback reason', async () => {
     const status = runtimeStatus()
     status.hermes.activationError = 'Selected Runtime 0.20.0 is missing node/node.exe.'
-    status.webui.remoteVersions = ['0.6.32']
     api.fetchRuntimeVersionStatus.mockResolvedValue(status)
     const wrapper = mount(VersionManagementModal, { props: { show: false } })
     await wrapper.setProps({ show: true })
@@ -114,8 +113,38 @@ describe('VersionManagementModal Runtime storage selector', () => {
 
     expect(wrapper.get('[data-testid="runtime-activation-error"]').text())
       .toContain('Selected Runtime 0.20.0 is missing node/node.exe.')
-    expect(wrapper.text()).not.toContain('runtimeVersions.webUiTitle')
-    expect(wrapper.text()).not.toContain('0.6.32')
+  })
+
+  it('shows remote Web UI versions and starts an in-app download', async () => {
+    const status = runtimeStatus()
+    status.webui.remoteVersions = ['0.6.40']
+    api.fetchRuntimeVersionStatus.mockResolvedValue(status)
+    api.downloadWebUiVersion.mockResolvedValue({
+      success: true,
+      job: {
+        id: 'webui-0.6.40',
+        kind: 'webui',
+        source: 'github',
+        version: '0.6.40',
+        status: 'queued',
+        stage: 'queued',
+        message: '',
+        error: '',
+        createdAt: '2026-08-13T00:00:00.000Z',
+        updatedAt: '2026-08-13T00:00:00.000Z',
+      },
+    })
+    const wrapper = mount(VersionManagementModal, { props: { show: false } })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('runtimeVersions.webUiTitle')
+    expect(wrapper.text()).toContain('0.6.40')
+    await wrapper.get('[data-testid="download-webui-github-0.6.40"]').trigger('click')
+    await flushPromises()
+
+    expect(api.downloadWebUiVersion).toHaveBeenCalledWith('0.6.40', 'github')
+    expect(message.success).toHaveBeenCalledWith('runtimeVersions.downloadStarted')
   })
 
   it('opens the desktop picker and schedules migration to the selected directory', async () => {
