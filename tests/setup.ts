@@ -1,4 +1,15 @@
+import { resolve } from 'node:path'
 import { vi } from 'vitest'
+
+if (!process.env.HERMES_WEB_UI_TEST_DB_DIR) {
+  const poolId = process.env.VITEST_POOL_ID || process.env.VITEST_WORKER_ID || 'main'
+  const safePoolId = poolId.replace(/[^a-zA-Z0-9._-]/g, '_')
+  process.env.HERMES_WEB_UI_TEST_DB_DIR = resolve(
+    process.cwd(),
+    'packages/server/data/test-runtime',
+    `vitest-worker-${safePoolId}-${process.pid}`,
+  )
+}
 
 // Vite injects this at build time; unit tests need a stable fallback.
 ;(globalThis as any).__APP_VERSION__ = 'test'
