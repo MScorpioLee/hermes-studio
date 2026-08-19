@@ -571,6 +571,15 @@ export default {
     outlineEmpty: '暂无会话内容',
     outlineUserQuestion: '用户问题',
     inputPlaceholder: '输入消息... (Enter 发送，Shift+Enter 换行)',
+    sendMode: {
+      label: '运行中消息发送方式',
+      queue: '排队',
+      steer: '引导',
+      queueHint: '当前任务完成后再处理这条消息',
+      steerHint: 'Steer：立即把补充要求发送给正在运行的 Agent',
+      steerPlaceholder: '输入对当前任务的补充指令... (Enter 引导)',
+      attachmentsUnsupported: '引导模式仅支持文本；带附件的消息请使用排队模式。',
+    },
     inputHeightResizeHint: '拖拽调整聊天输入框高度，双击恢复自动高度。',
     slashCommandArgs: {
       message: '<消息>',

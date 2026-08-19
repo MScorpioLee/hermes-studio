@@ -571,6 +571,15 @@ export default {
     outlineEmpty: 'No conversation content',
     outlineUserQuestion: 'User question',
     inputPlaceholder: 'Type a message... (Enter to send, Shift+Enter for new line)',
+    sendMode: {
+      label: 'Active-run message delivery',
+      queue: 'Queue',
+      steer: 'Steer',
+      queueHint: 'Handle this message after the current run finishes',
+      steerHint: 'Send guidance to the Agent during the active run',
+      steerPlaceholder: 'Add guidance for the active run... (Enter to steer)',
+      attachmentsUnsupported: 'Steer accepts text only. Use Queue for messages with attachments.',
+    },
     inputHeightResizeHint: 'Drag to resize the chat input. Double-click to reset.',
     slashCommandArgs: {
       message: '<message>',

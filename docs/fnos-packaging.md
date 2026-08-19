@@ -58,10 +58,17 @@ The output is written to `dist/fnos/hermes-studio.fpk`.
 
 ## GitHub Updates
 
-The fork tracks upstream through `.github/workflows/sync-upstream.yml`. It runs
-every six hours and can also be started manually. When `upstream/main` has new
-commits, the workflow merges them into this fork's `main` branch and dispatches
-the native fnOS package build.
+The fork tracks upstream Web UI releases through
+`.github/workflows/sync-upstream.yml`. It runs every six hours and can also be
+started manually. When upstream publishes a newer release tag, the workflow
+merges that tag into this fork's `main` branch and builds a matching fnOS Web UI
+artifact. Native fnOS shell releases remain independent.
+
+The visible `Queue` / `Steer` delivery control in `ChatInput.vue` is an fnOS
+compatibility requirement. Upstream merges must retain it, and
+`harness:check` blocks a release if the control or its `/steer` routing is
+removed. The local implementation may be removed only after upstream ships an
+equivalent visible control and the contract test is updated in the same merge.
 
 The package workflow writes two files:
 

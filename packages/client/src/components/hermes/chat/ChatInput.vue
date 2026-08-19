@@ -339,6 +339,38 @@ const isBridgeSession = computed(() => {
   if (!session) return chatStore.runtimeMode !== 'global_agent'
   return session.source === 'cli'
 })
+type ChatSendMode = 'queue' | 'steer'
+const sendMode = ref<ChatSendMode>('queue')
+const isActiveBridgeRun = computed(() => {
+  const sessionId = chatStore.activeSessionId
+  return !!sessionId && isBridgeSession.value && chatStore.isSessionLive(sessionId)
+})
+const inputPlaceholder = computed(() =>
+  isActiveBridgeRun.value && sendMode.value === 'steer'
+    ? t('chat.sendMode.steerPlaceholder')
+    : t('chat.inputPlaceholder'),
+)
+
+function selectSendMode(mode: ChatSendMode) {
+  if (mode === 'steer' && attachments.value.length > 0) {
+    message.error(t('chat.sendMode.attachmentsUnsupported'))
+    return
+  }
+  sendMode.value = mode
+  textareaRef.value?.focus()
+}
+
+watch(
+  () => [chatStore.activeSessionId, isActiveBridgeRun.value] as const,
+  ([sessionId, isLive], previous) => {
+    if (!isLive || (previous && sessionId !== previous[0])) sendMode.value = 'queue'
+  },
+)
+
+watch(() => attachments.value.length, (count) => {
+  if (count > 0 && sendMode.value === 'steer') sendMode.value = 'queue'
+})
+
 const isForkCommandSession = computed(() => !!chatStore.activeSession && chatStore.activeSession.source !== 'coding_agent')
 const skillPickerItems = computed(() => {
   const byName = new Map<string, SkillInfo>()
@@ -1019,7 +1051,15 @@ function handleSend() {
     return
   }
 
-  chatStore.sendMessage(text, attachments.value.length > 0 ? attachments.value : undefined)
+  const shouldSteer = isActiveBridgeRun.value && sendMode.value === 'steer'
+  if (shouldSteer && attachments.value.length > 0) {
+    message.error(t('chat.sendMode.attachmentsUnsupported'))
+    return
+  }
+  const submittedText = shouldSteer && !/^\/steer(?:\s|$)/i.test(text)
+    ? `/steer ${text}`
+    : text
+  chatStore.sendMessage(submittedText, attachments.value.length > 0 ? attachments.value : undefined)
   inputText.value = ''
   saveDraftForActiveSession('')
   attachments.value = []
@@ -1444,7 +1484,7 @@ function isImage(type: string): boolean {
         class="input-textarea"
         dir="auto"
         :style="textareaHeight ? { height: textareaHeight + 'px' } : {}"
-        :placeholder="t('chat.inputPlaceholder')"
+        :placeholder="inputPlaceholder"
         rows="1"
         @keydown="handleKeydown"
         @compositionstart="handleCompositionStart"
@@ -1587,6 +1627,38 @@ function isImage(type: string): boolean {
 
         </div>
         <div class="input-actions">
+          <div
+            v-if="isActiveBridgeRun"
+            class="send-mode-control"
+            data-testid="chat-send-mode"
+            role="group"
+            :aria-label="t('chat.sendMode.label')"
+          >
+            <button
+              type="button"
+              class="send-mode-option"
+              :class="{ active: sendMode === 'queue' }"
+              data-send-mode="queue"
+              :aria-pressed="sendMode === 'queue'"
+              :title="t('chat.sendMode.queueHint')"
+              @click="selectSendMode('queue')"
+            >
+              {{ t('chat.sendMode.queue') }}
+            </button>
+            <button
+              type="button"
+              class="send-mode-option send-mode-option--steer"
+              :class="{ active: sendMode === 'steer' }"
+              data-send-mode="steer"
+              :aria-pressed="sendMode === 'steer'"
+              :aria-label="`${t('chat.sendMode.steer')} (Steer)`"
+              :title="t('chat.sendMode.steerHint')"
+              :disabled="attachments.length > 0"
+              @click="selectSendMode('steer')"
+            >
+              {{ t('chat.sendMode.steer') }}
+            </button>
+          </div>
           <VoiceDialogueControls
             :status="voiceDialogue.status.value"
             :transcript="voiceDialogueTranscript"
@@ -2198,6 +2270,11 @@ function isImage(type: string): boolean {
     gap: 5px;
   }
 
+  .send-mode-option {
+    min-width: 40px;
+    padding: 0 6px;
+  }
+
   .reasoning-effort-label,
   .auto-play-speech-switch {
     display: none;
@@ -2482,6 +2559,57 @@ function isImage(type: string): boolean {
   gap: 7px;
   flex-shrink: 0;
   align-items: center;
+}
+
+.send-mode-control {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid $border-color;
+  border-radius: 7px;
+  background: rgba(var(--text-primary-rgb), 0.04);
+}
+
+.send-mode-option {
+  min-width: 42px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: $text-muted;
+  font: inherit;
+  font-size: 11px;
+  line-height: 24px;
+  letter-spacing: 0;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    color: $text-primary;
+    background: rgba(var(--text-primary-rgb), 0.06);
+  }
+
+  &:focus-visible {
+    outline: 2px solid $accent-primary;
+    outline-offset: 1px;
+  }
+
+  &.active {
+    color: $text-primary;
+    background: $bg-primary;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+
+  &--steer.active {
+    color: $accent-primary;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
 }
 
 .input-toolbar {

@@ -92,6 +92,20 @@ function mountForSession(
   return mount(ChatInput, { global: { plugins: [pinia] } })
 }
 
+function mountLiveBridgeSession(sessionId: string) {
+  const pinia = createTestingPinia({ stubActions: false, createSpy: vi.fn })
+  const chatStore = useChatStore()
+  chatStore.sessions = [
+    { id: sessionId, title: sessionId, source: 'cli', messages: [], createdAt: Date.now(), updatedAt: Date.now() },
+  ]
+  chatStore.activeSessionId = sessionId
+  chatStore.activeSession = chatStore.sessions[0]
+  vi.spyOn(chatStore, 'isSessionLive').mockReturnValue(true)
+  const sendMessage = vi.spyOn(chatStore, 'sendMessage').mockResolvedValue(undefined)
+  const wrapper = mount(ChatInput, { global: { plugins: [pinia] } })
+  return { wrapper, sendMessage }
+}
+
 describe('ChatInput draft persistence', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -417,5 +431,35 @@ describe('ChatInput draft persistence', () => {
     await nextTick()
 
     expect(wrapper.find('.slash-command-dropdown').exists()).toBe(false)
+  })
+
+  it('shows queue and steer delivery modes only while a bridge run is active', () => {
+    const idleWrapper = mountForSession('session-idle')
+    const { wrapper: liveWrapper } = mountLiveBridgeSession('session-live')
+
+    expect(idleWrapper.find('[data-testid="chat-send-mode"]').exists()).toBe(false)
+    expect(liveWrapper.get('[data-testid="chat-send-mode"]').attributes('aria-label')).toBe('chat.sendMode.label')
+    expect(liveWrapper.get('[data-send-mode="queue"]').attributes('aria-pressed')).toBe('true')
+    expect(liveWrapper.get('[data-send-mode="steer"]').attributes('aria-pressed')).toBe('false')
+  })
+
+  it('keeps active-run messages queued by default', async () => {
+    const { wrapper, sendMessage } = mountLiveBridgeSession('session-queue')
+
+    await wrapper.get('textarea').setValue('Run this after the current task')
+    await wrapper.get('.send-button').trigger('click')
+
+    expect(sendMessage).toHaveBeenCalledWith('Run this after the current task', undefined)
+  })
+
+  it('sends active-run text through the existing steer command when steer mode is selected', async () => {
+    const { wrapper, sendMessage } = mountLiveBridgeSession('session-steer')
+
+    await wrapper.get('[data-send-mode="steer"]').trigger('click')
+    await wrapper.get('textarea').setValue('Check the logs first and do not restart')
+    await wrapper.get('.send-button').trigger('click')
+
+    expect(sendMessage).toHaveBeenCalledWith('/steer Check the logs first and do not restart', undefined)
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('')
   })
 })

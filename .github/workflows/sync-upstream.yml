@@ -47,8 +47,14 @@ jobs:
         run: |
           set -euo pipefail
           latest_tag="$(
-            gh release list --repo "$UPSTREAM_REPO" --limit 100 --json tagName,isDraft,isPrerelease \
-              --jq '.[] | select(.isDraft == false and .isPrerelease == false) | .tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' \
+            gh api "repos/${UPSTREAM_REPO}/releases?per_page=100" --jq '
+              .[]
+              | select(.draft == false and .prerelease == false)
+              | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+              | (.tag_name | sub("^v"; "")) as $version
+              | select(any(.assets[]?; .name == ("hermes-web-ui-" + $version + ".tar.gz")))
+              | .tag_name
+            ' \
               | sort -V \
               | tail -n 1
           )"

@@ -172,6 +172,18 @@ for (const scriptName of [
   }
 }
 
+const chatInput = await readText('packages/client/src/components/hermes/chat/ChatInput.vue')
+for (const phrase of [
+  'data-testid="chat-send-mode"',
+  'data-send-mode="queue"',
+  'data-send-mode="steer"',
+  '`/steer ${text}`',
+]) {
+  if (!chatInput.includes(phrase)) {
+    fail(`ChatInput must keep the visible fnOS Queue/Steer delivery control: ${phrase}`)
+  }
+}
+
 const architecture = await readText('ARCHITECTURE.md')
 for (const phrase of [
   'packages/client/src',
@@ -310,6 +322,12 @@ if (!webuiReleaseWorkflow.includes("VITE_HERMES_DIRECT_WS_PORT: '6060'")) {
 
 if (syncUpstreamWorkflow.includes('git merge --no-edit upstream/main')) {
   fail('sync-upstream.yml must not automatically merge upstream/main on the fnOS manifest schedule')
+}
+const upstreamReleaseSelection = syncUpstreamWorkflow
+  .split('- name: Find latest upstream Web UI release')[1]
+  ?.split('- name: Check fnOS-compatible release assets')[0] || ''
+if (!upstreamReleaseSelection.includes('hermes-web-ui-') || !upstreamReleaseSelection.includes('.assets')) {
+  fail('sync-upstream.yml must identify Web UI releases by their hermes-web-ui archive asset')
 }
 if (!syncUpstreamWorkflow.includes('WEBUI_VERSIONS_JSON')) {
   fail('sync-upstream.yml must refresh the fnOS Web UI version list without a source merge')
