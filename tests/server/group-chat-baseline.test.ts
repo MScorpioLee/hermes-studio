@@ -18,6 +18,7 @@ import {
   GroupAgentRelayServer,
   redactRelaySecrets,
   relayRoomWorkspace,
+  validateRelayRunRequest,
 } from '../../packages/server/src/services/hermes/group-chat/agent-relay'
 import { AgentClient } from '../../packages/server/src/services/hermes/group-chat/agent-clients'
 import {
@@ -75,6 +76,31 @@ describe('group chat baseline behavior', () => {
     })
   })
 
+  it('accepts Relay mention depths governed by bounded or unlimited room policy', () => {
+    const request = {
+      protocolVersion: 2,
+      runId: '11111111-2222-4333-8444-555555555555',
+      room: { id: 'room-1', name: 'Room 1' },
+      members: [],
+      agents: [],
+      message: {
+        messageId: 'source-1',
+        content: '@Remote continue',
+        senderName: 'Source',
+        senderId: 'agent-source',
+        timestamp: 1,
+        role: 'assistant',
+        mentionDepth: 100,
+      },
+      runtimeContext: { summary: '', history: [] },
+      attachments: [],
+    }
+
+    expect(() => validateRelayRunRequest(request)).not.toThrow()
+    request.message.mentionDepth = Number.MAX_SAFE_INTEGER
+    expect(() => validateRelayRunRequest(request)).not.toThrow()
+  })
+
   it('joins an existing room and returns room-level history and membership', async () => {
     const storage = groupServer.getStorage()
     storage.saveRoom('room-1', 'Room 1', 'ROOM1')
@@ -98,6 +124,35 @@ describe('group chat baseline behavior', () => {
     expect(joined.members).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'Alice', connectionStatus: 'online' }),
     ]))
+  })
+
+  it('honors the requested initial history page size when joining', async () => {
+    const storage = groupServer.getStorage()
+    storage.saveRoom('room-history-limit', 'History Limit', 'HISTORY1')
+    for (let index = 1; index <= 200; index += 1) {
+      storage.saveMessageAndRefreshRoom({
+        id: `msg-${String(index).padStart(3, '0')}`,
+        roomId: 'room-history-limit',
+        senderId: 'user-a',
+        senderName: 'Alice',
+        content: `message ${index}`,
+        timestamp: index,
+        role: 'user',
+      } as any)
+    }
+
+    const alice = await connectGroupChatClient(port, 'user-a', 'Alice')
+    harness.sockets.push(alice)
+    const joined = await emitAck<any>(alice, 'join', {
+      roomId: 'room-history-limit',
+      inviteCode: 'HISTORY1',
+      historyLimit: 50,
+    })
+
+    expect(joined.messages).toHaveLength(50)
+    expect(joined.messages[0]?.id).toBe('msg-151')
+    expect(joined.messages.at(-1)?.id).toBe('msg-200')
+    expect(joined).toMatchObject({ total: 200, hasMore: true })
   })
 
   it('broadcasts persisted human members as offline after their socket disconnects', async () => {
@@ -379,11 +434,20 @@ describe('group chat baseline behavior', () => {
       ownerName: 'Guest',
       targetOrigin: 'http://127.0.0.1:8648',
       agent: relayStore.normalizeRemoteGroupAgentDescriptor({
-        agent: 'hermes',
+        agent: 'pi',
         profile: 'default',
-        name: 'Remote',
+        provider: 'openai',
+        model: 'pi-remote-model',
+        apiMode: 'codex_responses',
+        name: 'Remote Pi',
       }),
       now: 1_000,
+    })
+    expect(created.request.agent).toMatchObject({
+      agent: 'pi',
+      model: 'pi-remote-model',
+      apiMode: 'codex_responses',
+      name: 'Remote Pi',
     })
 
     expect(relayStore.getGroupAgentPairingRequestForRequester(
@@ -450,11 +514,12 @@ describe('group chat baseline behavior', () => {
       now: 1_000,
     })
     const agent = relayStore.normalizeRemoteGroupAgentDescriptor({
-      agent: 'codex',
+      agent: 'pi',
       profile: 'default',
       provider: 'openai',
       model: 'gpt-test',
-      name: 'Remote Codex',
+      apiMode: 'codex_responses',
+      name: 'Remote Pi',
     })
 
     expect(draft.status).toBe('draft')
@@ -470,7 +535,10 @@ describe('group chat baseline behavior', () => {
       requestSecret,
       agent,
       1_100,
-    )).toMatchObject({ status: 'pending', agent: { name: 'Remote Codex' } })
+    )).toMatchObject({
+      status: 'pending',
+      agent: { agent: 'pi', name: 'Remote Pi', apiMode: 'codex_responses' },
+    })
     expect(relayStore.submitGroupAgentPairingHandoff(
       draft.id,
       requestSecret,
@@ -502,14 +570,18 @@ describe('group chat baseline behavior', () => {
       allowRemoteWorkspaceAccess: true,
     })
     storage.addRoomMember('room-relay', 'guest-relay', 'Relay Guest', '')
+    storage.addRoomMember('room-relay', 'auth:7', 'Relay Observer', '')
     const created = relayStore.createGroupAgentPairingRequest({
       roomId: 'room-relay',
       ownerMemberId: 'guest-relay',
       ownerName: 'Relay Guest',
       targetOrigin: 'http://127.0.0.1:8648',
       agent: relayStore.normalizeRemoteGroupAgentDescriptor({
-        agent: 'hermes',
+        agent: 'pi',
         profile: 'default',
+        provider: 'openai',
+        model: 'pi-relay-model',
+        apiMode: 'codex_responses',
         name: 'Remote Relay Agent',
       }),
     })
@@ -526,13 +598,17 @@ describe('group chat baseline behavior', () => {
       rooms: ['room-relay'],
     })
     const proxySendMessage = vi.spyOn(AgentClient.prototype, 'sendMessage').mockResolvedValue('cloud-message')
+    const proxyApprovalRequested = vi.spyOn(AgentClient.prototype, 'emitApprovalRequested').mockImplementation(() => {})
+    const proxyApprovalResolved = vi.spyOn(AgentClient.prototype, 'emitApprovalResolved').mockImplementation(() => {})
+    const proxyClarifyRequested = vi.spyOn(AgentClient.prototype, 'emitClarifyRequested').mockImplementation(() => {})
+    const proxyClarifyResolved = vi.spyOn(AgentClient.prototype, 'emitClarifyResolved').mockImplementation(() => {})
 
     const wrongTarget = socketIo(`http://127.0.0.1:${port}/group-chat-agent-relay`, {
       autoConnect: false,
       transports: ['websocket'],
       reconnection: false,
       auth: {
-        protocolVersion: 1,
+        protocolVersion: 2,
         pairingTicket: created.pairingTicket,
         targetOrigin: 'http://127.0.0.1:8748',
       },
@@ -553,7 +629,7 @@ describe('group chat baseline behavior', () => {
       transports: ['websocket'],
       reconnection: false,
       auth: {
-        protocolVersion: 1,
+        protocolVersion: 2,
         pairingTicket: created.pairingTicket,
         targetOrigin: 'http://127.0.0.1:8648',
       },
@@ -567,11 +643,16 @@ describe('group chat baseline behavior', () => {
     intendedTarget.connect()
     const readyPayload = await ready
     expect(readyPayload).toMatchObject({
-      protocolVersion: 1,
+      protocolVersion: 2,
       roomId: 'room-relay',
       roomName: 'Relay Room',
       inviteCode: 'RELAY1',
-      agent: { name: 'Remote Relay Agent' },
+      agent: {
+        agent: 'pi',
+        model: 'pi-relay-model',
+        apiMode: 'codex_responses',
+        name: 'Remote Relay Agent',
+      },
     })
     expect(relayStore.getGroupAgentPairingRequestForRequester(
       created.request.id,
@@ -579,6 +660,8 @@ describe('group chat baseline behavior', () => {
     )?.status).toBe('consumed')
     expect(storage.getRoomAgents('room-relay')).toEqual([
       expect.objectContaining({
+        agent: 'pi',
+        model: 'pi-relay-model',
         name: 'Remote Relay Agent',
         executorType: 'remote',
         remoteOrigin: 'http://127.0.0.1:8648',
@@ -601,12 +684,20 @@ describe('group chat baseline behavior', () => {
       senderId: 'guest-relay',
       timestamp: Date.now(),
       role: 'user',
+      mentionDepth: 100,
+      handoffChainId: 'trusted-chain',
+      continuationAttemptId: 'trusted-attempt',
     })
     const run = await runRequested
     expect(run.room).toMatchObject({
       id: 'room-relay',
       name: 'Relay Room',
       summaryProfile: 'default',
+    })
+    expect(run.message).toMatchObject({
+      mentionDepth: 100,
+      handoffChainId: 'trusted-chain',
+      continuationAttemptId: 'trusted-attempt',
     })
     expect(run.workspaceApi).toMatchObject({
       access: 'read-write',
@@ -636,10 +727,17 @@ describe('group chat baseline behavior', () => {
         agentSessionId: 'remote-session',
         extra: {
           role: 'assistant',
+          mentions: [
+            { type: 'agent', participantId: 'agent-first', displayName: 'First' },
+            { type: 'agent', participantId: 'agent-second', displayName: 'Second' },
+          ],
           roomId: 'another-room',
           content: 'forged content',
           id: 'forged-id',
           senderId: 'forged-sender',
+          mentionDepth: 1,
+          handoffChainId: 'forged-chain',
+          continuationAttemptId: 'forged-attempt',
         },
       },
     })
@@ -651,7 +749,16 @@ describe('group chat baseline behavior', () => {
       'room-relay',
       'safe remote reply',
       expect.stringMatching(/^gcr_[a-f0-9]{32}$/),
-      { role: 'assistant' },
+      {
+        role: 'assistant',
+        mentions: [
+          { type: 'agent', participantId: 'agent-first', displayName: 'First' },
+          { type: 'agent', participantId: 'agent-second', displayName: 'Second' },
+        ],
+        mentionDepth: 101,
+        handoffChainId: 'trusted-chain',
+        continuationAttemptId: 'trusted-attempt',
+      },
       'remote-session',
     )
     const workspaceDiffMessage = storage.getRecentMessagesForUI('room-relay')
@@ -669,6 +776,84 @@ describe('group chat baseline behavior', () => {
       ],
     })
 
+    const interactionRunRequested = once<any>(intendedTarget as any, 'run.request', 2_000)
+    const interactionReply = executor.replyToMention('room-relay', {
+      messageId: 'interaction-source-message',
+      content: '@Remote Relay Agent ask before continuing',
+      senderName: 'Relay Guest',
+      senderId: 'guest-relay',
+      timestamp: Date.now(),
+      role: 'user',
+    })
+    const interactionRun = await interactionRunRequested
+    intendedTarget.emit('run.accepted', { runId: interactionRun.runId })
+    await expect(emitAck<any>(intendedTarget as any, 'agent.event', {
+      runId: interactionRun.runId,
+      seq: 1,
+      event: 'approval.requested',
+      data: {
+        approval_id: 'remote-approval',
+        command: 'touch relay.txt',
+        choices: ['once', 'deny'],
+        timeout_ms: 300_000,
+        agentSessionId: 'remote-session',
+      },
+    })).resolves.toEqual({ ok: true })
+    const cloudApprovalId = String(proxyApprovalRequested.mock.calls.at(-1)?.[1]?.approval_id || '')
+    expect(cloudApprovalId).toMatch(/^gca_[a-f0-9]{32}$/)
+
+    await expect(emitAck<any>(intendedTarget as any, 'agent.event', {
+      runId: interactionRun.runId,
+      seq: 2,
+      event: 'clarify.requested',
+      data: {
+        clarify_id: 'remote-clarify',
+        question: 'Which environment?',
+        choices: ['staging', 'production'],
+        timeout_ms: 300_000,
+        agentSessionId: 'remote-session',
+      },
+    })).resolves.toEqual({ ok: true })
+    const cloudClarifyId = String(proxyClarifyRequested.mock.calls.at(-1)?.[1]?.clarify_id || '')
+    expect(cloudClarifyId).toMatch(/^gcc_[a-f0-9]{32}$/)
+
+    intendedTarget.once('approval.respond', (data: any, ack: (response: any) => void) => {
+      expect(data).toEqual({ approvalId: 'remote-approval', choice: 'once' })
+      ack({ resolved: true })
+    })
+    await expect(executor.respondApproval!(cloudApprovalId, 'once')).resolves.toBe(true)
+    intendedTarget.once('clarify.respond', (data: any, ack: (response: any) => void) => {
+      expect(data).toEqual({ clarifyId: 'remote-clarify', response: 'staging' })
+      ack({ resolved: true })
+    })
+    await expect(executor.respondClarify!(cloudClarifyId, 'staging')).resolves.toBe(true)
+
+    await expect(emitAck<any>(intendedTarget as any, 'agent.event', {
+      runId: interactionRun.runId,
+      seq: 3,
+      event: 'approval.resolved',
+      data: { approval_id: 'remote-approval', choice: 'once', agentSessionId: 'remote-session' },
+    })).resolves.toEqual({ ok: true })
+    await expect(emitAck<any>(intendedTarget as any, 'agent.event', {
+      runId: interactionRun.runId,
+      seq: 4,
+      event: 'clarify.resolved',
+      data: {
+        clarify_id: 'remote-clarify',
+        resolved: true,
+        reason: 'response',
+        agentSessionId: 'remote-session',
+      },
+    })).resolves.toEqual({ ok: true })
+    expect(proxyApprovalResolved).toHaveBeenCalledWith('room-relay', expect.objectContaining({
+      approval_id: cloudApprovalId,
+    }))
+    expect(proxyClarifyResolved).toHaveBeenCalledWith('room-relay', expect.objectContaining({
+      clarify_id: cloudClarifyId,
+    }))
+    intendedTarget.emit('run.completed', { runId: interactionRun.runId })
+    await interactionReply
+
     const nameConflict = await emitAck<any>(intendedTarget as any, 'agent.config.update', {
       agent: 'codex',
       profile: 'default',
@@ -684,6 +869,31 @@ describe('group chat baseline behavior', () => {
       code: 'ROOM_PARTICIPANT_NAME_CONFLICT',
       error: 'Name is already in use in this room',
     })
+
+    ;(groupServer.agentClients as any)._pausedRooms.add('room-relay')
+    const queuedReply = groupServer.agentClients.processMentions('room-relay', {
+      messageId: 'queued-config-fence',
+      content: '@Remote Relay Agent queued',
+      senderName: 'Relay Guest',
+      senderId: 'guest-relay',
+      timestamp: Date.now(),
+      role: 'user',
+      mentions: [{ type: 'agent', participantId: executor.agentId }],
+    })
+    const queuedUpdate = await emitAck<any>(intendedTarget as any, 'agent.config.update', {
+      agent: 'codex', profile: 'default', provider: 'openai', model: 'should-not-apply',
+      apiMode: 'codex_responses', reasoningEffort: 'high', name: 'Queued Mutation', description: '', avatar: '',
+    })
+    expect(queuedUpdate).toMatchObject({ code: 'GROUP_AGENT_BUSY' })
+    const queuedRunRequested = once<any>(intendedTarget as any, 'run.request', 2_000)
+    ;(groupServer.agentClients as any)._pausedRooms.delete('room-relay')
+    const drainQueued = (groupServer.agentClients as any)._drainRoomQueue('room-relay')
+    const queuedRun = await queuedRunRequested
+    expect(queuedRun.message).toMatchObject({ messageId: 'queued-config-fence' })
+    intendedTarget.emit('run.accepted', { runId: queuedRun.runId })
+    intendedTarget.emit('run.completed', { runId: queuedRun.runId })
+    await drainQueued
+    await queuedReply
 
     const updated = await emitAck<any>(intendedTarget as any, 'agent.config.update', {
       agent: 'codex',
@@ -710,6 +920,11 @@ describe('group chat baseline behavior', () => {
       name: 'Updated Relay Agent',
       ownerMemberId: 'guest-relay',
     })
+    expect(groupServer.agentClients.getAgent('room-relay', readyPayload.agent.agentId)).toMatchObject({
+      agent: 'codex',
+      model: 'gpt-updated',
+      name: 'Updated Relay Agent',
+    })
 
     const allRunRequested = once<any>(intendedTarget as any, 'run.request', 2_000)
     const processAll = groupServer.agentClients.processMentions('room-relay', {
@@ -729,7 +944,83 @@ describe('group chat baseline behavior', () => {
     intendedTarget.emit('run.completed', { runId: allRun.runId })
     await processAll
 
+    const failedRunRequested = once<any>(intendedTarget as any, 'run.request', 2_000)
+    const failedReply = executor.replyToMention('room-relay', {
+      messageId: 'known-failure-message',
+      content: '@Updated Relay Agent fail with a terminal result',
+      senderName: 'Relay Guest',
+      senderId: 'guest-relay',
+      timestamp: Date.now(),
+      role: 'user',
+    })
+    const failedRun = await failedRunRequested
+    intendedTarget.emit('run.accepted', { runId: failedRun.runId })
+    intendedTarget.emit('run.failed', { runId: failedRun.runId, error: 'Known remote failure' })
+    const failedError = await failedReply.then(
+      () => null,
+      error => error as Error & { code?: string; outcomeUnknown?: boolean },
+    )
+    expect(failedError).toMatchObject({ code: 'GROUP_AGENT_REMOTE_RUN_FAILED' })
+    expect(failedError?.outcomeUnknown).not.toBe(true)
+
+    const uncertainRunRequested = once<any>(intendedTarget as any, 'run.request', 2_000)
+    const responseRunId = 'remote-response-disconnect'
+    vi.spyOn(AgentClient.prototype, 'emitContextStatus').mockImplementation((roomId, status, extra) => {
+      ;(groupServer as any).updateRoomAgentActivity(
+        roomId,
+        'Updated Relay Agent',
+        status,
+        typeof extra?.runId === 'string' ? extra.runId : '',
+      )
+    })
+    const uncertainReply = executor.replyToMention('room-relay', {
+      messageId: 'transport-loss-message',
+      content: '@Updated Relay Agent keep running across a transport loss',
+      senderName: 'Relay Guest',
+      senderId: 'guest-relay',
+      timestamp: Date.now(),
+      role: 'user',
+    }, { summary: '', history: [] }, (status, extra) => {
+      ;(groupServer as any).updateRoomAgentActivity(
+        'room-relay',
+        'Updated Relay Agent',
+        status,
+        typeof extra?.runId === 'string' ? extra.runId : '',
+      )
+    })
+    const uncertainRun = await uncertainRunRequested
+    intendedTarget.emit('run.accepted', { runId: uncertainRun.runId })
+    await expect(emitAck<any>(intendedTarget as any, 'agent.event', {
+      runId: uncertainRun.runId,
+      seq: 1,
+      event: 'context_status',
+      data: {
+        status: 'replying',
+        runId: responseRunId,
+      },
+    })).resolves.toEqual({ ok: true })
+    const loadActivities = () => {
+      const ack = vi.fn()
+      ;(groupServer as any).handleLoadRoomAgentActivities(
+        { id: 'observer-socket', data: { authUser: { id: 7 } } },
+        {},
+        ack,
+      )
+      return ack.mock.calls[0]?.[0]
+    }
+    expect(loadActivities()).toEqual({
+      activities: [expect.objectContaining({
+        roomId: 'room-relay',
+        runId: responseRunId,
+        status: 'replying',
+      })],
+    })
     intendedTarget.disconnect()
+    await expect(uncertainReply).rejects.toMatchObject({
+      code: 'GROUP_AGENT_OFFLINE',
+      outcomeUnknown: true,
+    })
+    expect(loadActivities()).toEqual({ activities: [] })
     await vi.waitFor(() => {
       expect(storage.getMentionableRoomAgents('room-relay')).toEqual([])
     })
@@ -746,7 +1037,7 @@ describe('group chat baseline behavior', () => {
       transports: ['websocket'],
       reconnection: false,
       auth: {
-        protocolVersion: 1,
+        protocolVersion: 2,
         connectorId: readyPayload.connectorId,
         credential: readyPayload.credential,
         targetOrigin: 'http://127.0.0.1:8648',

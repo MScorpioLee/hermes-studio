@@ -598,6 +598,134 @@ describe('group chat approval and context baseline', () => {
     expect(respondApproval).toHaveBeenCalledOnce()
   })
 
+  it('falls back to the Hermes bridge when a remote approval responder does not own the request', async () => {
+    const { agent, human, agentSessionId } = await joinPair()
+    const respondApproval = vi.fn(async () => false)
+    vi.spyOn(groupServer.agentClients, 'getAgents').mockReturnValue([{
+      name: 'Agent',
+      respondApproval,
+    } as any])
+    const bridgeApproval = vi.spyOn(AgentBridgeClient.prototype, 'approvalRespond')
+      .mockResolvedValue({ resolved: true } as any)
+    const requested = once<any>(human, 'approval.requested')
+
+    agent.emit('approval.requested', {
+      roomId: 'room-1',
+      agentName: 'Agent',
+      agentSessionId,
+      approval_id: 'approval-hermes-behind-remote',
+      command: 'touch file',
+      description: 'needs approval',
+    })
+    await expect(requested).resolves.toMatchObject({ approval_id: 'approval-hermes-behind-remote' })
+
+    await expect(emitAck(human, 'approval.respond', {
+      roomId: 'room-1',
+      approval_id: 'approval-hermes-behind-remote',
+      choice: 'once',
+    })).resolves.toEqual({ ok: true, resolved: true })
+    expect(respondApproval).toHaveBeenCalledWith('approval-hermes-behind-remote', 'once')
+    expect(bridgeApproval).toHaveBeenCalledWith('approval-hermes-behind-remote', 'once')
+  })
+
+  it('routes a remote clarification response and removes its locator', async () => {
+    const { agent, human, agentSessionId } = await joinPair()
+    const respondClarify = vi.fn(async () => true)
+    vi.spyOn(groupServer.agentClients, 'getAgents').mockReturnValue([{
+      name: 'Agent',
+      respondClarify,
+    } as any])
+    const requested = once<any>(human, 'clarify.requested')
+
+    agent.emit('clarify.requested', {
+      roomId: 'room-1',
+      agentName: 'Agent',
+      agentSessionId,
+      clarify_id: 'clarify-remote-once',
+      question: 'Which environment?',
+      choices: ['staging', 'production'],
+      timeout_ms: 300_000,
+    })
+    await expect(requested).resolves.toMatchObject({ clarify_id: 'clarify-remote-once' })
+
+    await expect(emitAck(human, 'clarify.respond', {
+      roomId: 'room-1',
+      clarify_id: 'clarify-remote-once',
+      response: 'staging',
+    })).resolves.toEqual({ ok: true, resolved: true })
+    await expect(emitAck(human, 'clarify.respond', {
+      roomId: 'room-1',
+      clarify_id: 'clarify-remote-once',
+      response: 'production',
+    })).resolves.toEqual({ error: 'Clarification is not pending in this room' })
+    expect(respondClarify).toHaveBeenCalledWith('clarify-remote-once', 'staging')
+  })
+
+  it('falls back to the Hermes bridge when a remote clarification responder does not own the request', async () => {
+    const { agent, human, agentSessionId } = await joinPair()
+    const respondClarify = vi.fn(async () => false)
+    vi.spyOn(groupServer.agentClients, 'getAgents').mockReturnValue([{
+      name: 'Agent',
+      respondClarify,
+    } as any])
+    const bridgeClarify = vi.spyOn(AgentBridgeClient.prototype, 'clarifyRespond')
+      .mockResolvedValue({ resolved: true } as any)
+    const requested = once<any>(human, 'clarify.requested')
+
+    agent.emit('clarify.requested', {
+      roomId: 'room-1',
+      agentName: 'Agent',
+      agentSessionId,
+      clarify_id: 'clarify-hermes-behind-remote',
+      question: 'Continue?',
+      choices: ['yes', 'no'],
+      timeout_ms: 300_000,
+    })
+    await expect(requested).resolves.toMatchObject({ clarify_id: 'clarify-hermes-behind-remote' })
+
+    await expect(emitAck(human, 'clarify.respond', {
+      roomId: 'room-1',
+      clarify_id: 'clarify-hermes-behind-remote',
+      response: 'yes',
+    })).resolves.toEqual({ ok: true, resolved: true })
+    expect(respondClarify).toHaveBeenCalledWith('clarify-hermes-behind-remote', 'yes')
+    expect(bridgeClarify).toHaveBeenCalledWith('clarify-hermes-behind-remote', 'yes')
+  })
+
+  it('expires stale pending interactions and tells the browser to close them', async () => {
+    const { agent, human, agentSessionId } = await joinPair()
+    const approvalRequested = once<any>(human, 'approval.requested')
+    const clarifyRequested = once<any>(human, 'clarify.requested')
+    agent.emit('approval.requested', {
+      roomId: 'room-1', agentName: 'Agent', agentSessionId,
+      approval_id: 'approval-expired', command: 'touch expired', timeout_ms: 300_000,
+    })
+    agent.emit('clarify.requested', {
+      roomId: 'room-1', agentName: 'Agent', agentSessionId,
+      clarify_id: 'clarify-expired', question: 'Continue?', timeout_ms: 300_000,
+    })
+    await approvalRequested
+    await clarifyRequested
+    const approvalResolved = once<any>(human, 'approval.resolved')
+    const clarifyResolved = once<any>(human, 'clarify.resolved')
+
+    groupServer.expirePendingAgentInteractions(
+      'room-1',
+      'Agent',
+      ['approval-expired'],
+      ['clarify-expired'],
+      'Remote Agent run timed out',
+    )
+
+    await expect(approvalResolved).resolves.toMatchObject({
+      approval_id: 'approval-expired', choice: 'deny', reason: 'Remote Agent run timed out',
+    })
+    await expect(clarifyResolved).resolves.toMatchObject({
+      clarify_id: 'clarify-expired', resolved: false, reason: 'Remote Agent run timed out',
+    })
+    await expect(emitAck<any>(human, 'load_pending_approvals', {})).resolves.toEqual({ pendingApprovals: [] })
+  })
+
   it('keeps Hermes approval responses routed through the Agent Bridge', async () => {
     const { agent, human, agentSessionId } = await joinPair()
     const bridgeApproval = vi.spyOn(AgentBridgeClient.prototype, 'approvalRespond')
@@ -620,6 +748,27 @@ describe('group chat approval and context baseline', () => {
       choice: 'session',
     })).resolves.toEqual({ ok: true, resolved: true })
     expect(bridgeApproval).toHaveBeenCalledWith('approval-hermes', 'session')
+  })
+
+  it('dismisses an approval when its runtime already reports it expired', async () => {
+    const { agent, human, agentSessionId } = await joinPair()
+    vi.spyOn(AgentBridgeClient.prototype, 'approvalRespond')
+      .mockRejectedValue(new Error('unknown approval request: approval-stale'))
+    const requested = once<any>(human, 'approval.requested')
+    agent.emit('approval.requested', {
+      roomId: 'room-1', agentName: 'Agent', agentSessionId,
+      approval_id: 'approval-stale', command: 'touch stale', description: 'expired',
+    })
+    await requested
+    const resolved = once<any>(human, 'approval.resolved')
+
+    await expect(emitAck(human, 'approval.respond', {
+      roomId: 'room-1', approval_id: 'approval-stale', choice: 'deny',
+    })).resolves.toEqual({ ok: true, resolved: true, stale: true })
+    await expect(resolved).resolves.toMatchObject({
+      approval_id: 'approval-stale', choice: 'deny', reason: 'unknown approval request: approval-stale',
+    })
+    await expect(emitAck<any>(human, 'load_pending_approvals', {})).resolves.toEqual({ pendingApprovals: [] })
   })
 
   it('does not route a pending approval through a different room', async () => {

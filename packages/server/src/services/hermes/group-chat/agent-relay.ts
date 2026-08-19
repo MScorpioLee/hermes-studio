@@ -7,6 +7,7 @@ import { io, type Socket as ClientSocket } from 'socket.io-client'
 import { config } from '../../../config'
 import { logger } from '../../../services/logger'
 import { respondToEkkoToolApproval } from '../../ekko-agent/approvals'
+import { respondToEkkoClarification } from '../../ekko-agent/clarifications'
 import { AgentBridgeClient } from '../agent-bridge'
 import {
   AgentClient,
@@ -15,6 +16,7 @@ import {
   type GroupAgentExecutor,
   type GroupChatRunService,
   type MentionMessage,
+  type StructuredMentionEntry,
   type WorkspaceDiffBroadcaster,
 } from './agent-clients'
 import { defaultGroupChatWorkspace, type GroupChatServer } from './index'
@@ -47,9 +49,12 @@ import {
   startWorkspaceRunCheckpoint,
 } from '../run-chat/workspace-diff-tracker'
 
-export const GROUP_AGENT_RELAY_PROTOCOL_VERSION = 1
+// Version 2 adds Pi to the remote Agent descriptor. Bumping the protocol keeps
+// older Studio builds from accepting a descriptor they cannot validate.
+export const GROUP_AGENT_RELAY_PROTOCOL_VERSION = 2
 const RELAY_ACCEPT_TIMEOUT_MS = 10_000
 const RELAY_RUN_TIMEOUT_MS = 150_000
+const RELAY_INTERACTION_TIMEOUT_MS = 330_000
 const RELAY_AGENT_CONFIG_UPDATE_INTERVAL_MS = 1_000
 const RELAY_ATTACHMENT_CHUNK_BYTES = 256 * 1024
 const RELAY_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024
@@ -73,7 +78,7 @@ type RelayAttachmentSource = RelayAttachment & {
 }
 
 type RelayRunRequest = {
-  protocolVersion: 1
+  protocolVersion: 2
   runId: string
   room: { id: string; name: string; summaryProfile?: string }
   members: Array<{ userId?: string; id?: string; name: string; description?: string }>
@@ -97,6 +102,7 @@ type RelayAgentEvent = {
 type PendingRelayRun = {
   runId: string
   roomId: string
+  message: MentionMessage
   lastSeq: number
   accepted: boolean
   acceptedTimer: ReturnType<typeof setTimeout>
@@ -104,6 +110,7 @@ type PendingRelayRun = {
   attachments: Map<string, RelayAttachmentSource>
   messageIds: Map<string, string>
   approvalIds: Map<string, string>
+  clarifyIds: Map<string, string>
   result: {
     parentMessageId?: string
     responseRunId?: string
@@ -195,7 +202,7 @@ export function relayRoomWorkspace(
   return workspace
 }
 
-function validateRelayRunRequest(value: unknown): asserts value is RelayRunRequest {
+export function validateRelayRunRequest(value: unknown): asserts value is RelayRunRequest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw relayError('Invalid Relay run request', 'GROUP_AGENT_RUN_INVALID')
   }
@@ -246,7 +253,7 @@ function validateRelayRunRequest(value: unknown): asserts value is RelayRunReque
   if (!Number.isFinite(message.timestamp)) throw relayError('Invalid Relay message timestamp', 'GROUP_AGENT_RUN_INVALID')
   if (
     message.mentionDepth !== undefined
-    && (!Number.isSafeInteger(message.mentionDepth) || message.mentionDepth < 0 || message.mentionDepth > 10)
+    && (!Number.isSafeInteger(message.mentionDepth) || message.mentionDepth < 0)
   ) {
     throw relayError('Invalid Relay mention depth', 'GROUP_AGENT_RUN_INVALID')
   }
@@ -343,18 +350,19 @@ function sameRemoteAgent(
 
 class RelayGroupAgentExecutor implements GroupAgentExecutor {
   readonly agentId: string
-  readonly agent: 'hermes' | 'ekko' | 'codex' | 'claude'
-  readonly profile: string
-  readonly provider: string
-  readonly model: string
-  readonly apiMode: string
-  readonly reasoningEffort: string
-  readonly name: string
-  readonly description: string
-  readonly avatar: string
+  agent: 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi'
+  profile: string
+  provider: string
+  model: string
+  apiMode: string
+  reasoningEffort: string
+  name: string
+  description: string
+  avatar: string
   readonly ownerMemberId: string
   private activeSessions = new Map<string, string>()
   private pendingRun: PendingRelayRun | null = null
+  private reservedInvocations = 0
   private detached = false
   private eventQueue: Promise<void> = Promise.resolve()
   private workspaceDiffBroadcaster: WorkspaceDiffBroadcaster | null = null
@@ -365,6 +373,13 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
     private readonly connector: GroupAgentConnector,
     agent: any,
     private readonly storage: any,
+    private readonly expirePendingInteractions: (
+      roomId: string,
+      agentName: string,
+      approvalIds: string[],
+      clarifyIds: string[],
+      reason: string,
+    ) => void,
   ) {
     this.agentId = String(agent.agentId)
     this.agent = agent.agent || 'hermes'
@@ -384,7 +399,27 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
   }
 
   get busy(): boolean {
-    return this.pendingRun !== null
+    return this.pendingRun !== null || this.reservedInvocations > 0
+  }
+
+  reserveInvocation(): void {
+    this.reservedInvocations += 1
+  }
+
+  releaseInvocation(): void {
+    this.reservedInvocations = Math.max(0, this.reservedInvocations - 1)
+  }
+
+  updateConfiguration(agent: any): void {
+    this.agent = agent.agent || 'hermes'
+    this.profile = String(agent.profile || 'default')
+    this.provider = String(agent.provider || '')
+    this.model = String(agent.model || '')
+    this.apiMode = String(agent.apiMode || '')
+    this.reasoningEffort = String(agent.reasoningEffort || '')
+    this.name = String(agent.name || this.profile)
+    this.description = String(agent.description || '')
+    this.avatar = String(agent.avatar || '')
   }
 
   setStorage(_storage: any): void {}
@@ -512,6 +547,7 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
         this.pendingRun = {
           runId,
           roomId,
+          message: prepared.message,
           lastSeq: 0,
           accepted: false,
           acceptedTimer,
@@ -519,6 +555,7 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
           attachments: new Map(prepared.attachments.map(attachment => [attachment.id, attachment])),
           messageIds: new Map(),
           approvalIds: new Map(),
+          clarifyIds: new Map(),
           result: relayResult,
           resolve,
           reject,
@@ -542,7 +579,10 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
           parentMessageId: relayResult.parentMessageId || null,
         })
       }
-      onStatus?.('ready')
+      onStatus?.(
+        'ready',
+        relayResult.responseRunId ? { runId: relayResult.responseRunId } : undefined,
+      )
     }
   }
 
@@ -701,6 +741,15 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
     clearTimeout(this.pendingRun.acceptedTimer)
   }
 
+  private refreshRunTimeout(pending: PendingRelayRun, timeoutMs = RELAY_RUN_TIMEOUT_MS): void {
+    clearTimeout(pending.runTimer)
+    pending.runTimer = setTimeout(() => {
+      this.relaySocket.emit('run.interrupt', { runId: pending.runId, reason: 'Remote Agent run timed out' })
+      this.finishRun(pending.runId, relayError('Remote Agent run timed out', 'GROUP_AGENT_RUN_TIMEOUT'))
+    }, timeoutMs)
+    pending.runTimer.unref?.()
+  }
+
   completeRun(runId: string, error?: string): void {
     const task = this.eventQueue.then(() => {
       this.finishRun(runId, error ? relayError(error, 'GROUP_AGENT_REMOTE_RUN_FAILED') : undefined)
@@ -709,7 +758,13 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
   }
 
   acceptEvent(event: RelayAgentEvent): Promise<void> {
-    const task = this.eventQueue.then(() => this.applyEvent(event))
+    const task = this.eventQueue
+      .then(() => this.applyEvent(event))
+      .catch((error) => {
+        const relayEventError = error instanceof Error ? error : relayError('Invalid relay event')
+        this.finishRun(event.runId, relayEventError)
+        throw relayEventError
+      })
     this.eventQueue = task.catch(() => undefined)
     return task
   }
@@ -730,6 +785,16 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
         if (content.length > 1_000_000) throw relayError('Remote Agent message is too large', 'GROUP_AGENT_EVENT_INVALID')
         const messageId = this.remoteMessageId(pending, data.id, true)
         const extra = this.sanitizeRemoteMessageExtra(data.extra)
+        if (extra.role === 'assistant') {
+          // Relay events are untrusted. Bind chained-routing metadata only
+          // from the server-issued invocation that created this pending run.
+          extra.mentionDepth = Math.min(
+            Number.MAX_SAFE_INTEGER,
+            Math.max(0, Number(pending.message.mentionDepth || 0)) + 1,
+          )
+          extra.handoffChainId = pending.message.handoffChainId || pending.message.messageId || ''
+          extra.continuationAttemptId = pending.message.continuationAttemptId || ''
+        }
         const persistedMessageId = await this.proxy.sendMessage(
           pending.roomId,
           content,
@@ -752,10 +817,15 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
         this.proxy.stopTyping(pending.roomId)
         break
       case 'context_status':
+        if (typeof data.runId === 'string' && data.runId.trim()) {
+          pending.result.responseRunId = data.runId.slice(0, 500)
+        }
         this.proxy.emitContextStatus(
           pending.roomId,
           data.status === 'compressing' || data.status === 'ready' ? data.status : 'replying',
-          undefined,
+          typeof data.runId === 'string' && data.runId.trim()
+            ? { runId: data.runId.slice(0, 500) }
+            : undefined,
           sessionId || undefined,
         )
         break
@@ -800,6 +870,10 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
         }
         const cloudApprovalId = `gca_${randomUUID().replace(/-/g, '')}`
         pending.approvalIds.set(cloudApprovalId, remoteApprovalId)
+        this.refreshRunTimeout(pending, Math.max(
+          RELAY_INTERACTION_TIMEOUT_MS,
+          this.remoteInteractionTimeout(data.timeout_ms) + RELAY_ACCEPT_TIMEOUT_MS,
+        ))
         this.proxy.emitApprovalRequested(pending.roomId, {
           ...this.sanitizeApprovalEvent(data),
           approval_id: cloudApprovalId,
@@ -817,6 +891,43 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
           choice: String(data.choice || '').slice(0, 32),
           agentSessionId: sessionId,
         })
+        if (pending.approvalIds.size === 0 && pending.clarifyIds.size === 0) {
+          this.refreshRunTimeout(pending)
+        }
+        break
+      }
+      case 'clarify.requested': {
+        const remoteClarifyId = String(data.clarify_id || '').trim()
+        if (!remoteClarifyId || remoteClarifyId.length > 240) {
+          throw relayError('Invalid remote clarification id', 'GROUP_AGENT_EVENT_INVALID')
+        }
+        const cloudClarifyId = `gcc_${randomUUID().replace(/-/g, '')}`
+        pending.clarifyIds.set(cloudClarifyId, remoteClarifyId)
+        this.refreshRunTimeout(pending, Math.max(
+          RELAY_INTERACTION_TIMEOUT_MS,
+          this.remoteInteractionTimeout(data.timeout_ms) + RELAY_ACCEPT_TIMEOUT_MS,
+        ))
+        this.proxy.emitClarifyRequested(pending.roomId, {
+          ...this.sanitizeClarifyEvent(data),
+          clarify_id: cloudClarifyId,
+          agentSessionId: sessionId,
+        })
+        break
+      }
+      case 'clarify.resolved': {
+        const remoteClarifyId = String(data.clarify_id || '').trim()
+        const entry = [...pending.clarifyIds.entries()].find(([, remote]) => remote === remoteClarifyId)
+        if (!entry) throw relayError('Unknown remote clarification id', 'GROUP_AGENT_EVENT_INVALID')
+        pending.clarifyIds.delete(entry[0])
+        this.proxy.emitClarifyResolved(pending.roomId, {
+          clarify_id: entry[0],
+          resolved: data.resolved !== false,
+          reason: String(data.reason || '').slice(0, 500),
+          agentSessionId: sessionId,
+        })
+        if (pending.approvalIds.size === 0 && pending.clarifyIds.size === 0) {
+          this.refreshRunTimeout(pending)
+        }
         break
       }
       default:
@@ -843,6 +954,23 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
         clearTimeout(timer)
         if (response?.error) reject(relayError(response.error))
         else resolve(response?.resolved === true)
+      })
+    })
+  }
+
+  respondClarify(clarifyId: string, response: string): Promise<boolean> {
+    if (!this.connected) return Promise.reject(relayError('Remote Agent is offline', 'GROUP_AGENT_OFFLINE'))
+    const remoteClarifyId = this.pendingRun?.clarifyIds.get(clarifyId)
+    if (!remoteClarifyId) return Promise.reject(relayError('Remote clarification is no longer pending'))
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(relayError('Remote clarification response timed out')), RELAY_ACCEPT_TIMEOUT_MS)
+      this.relaySocket.emit('clarify.respond', {
+        clarifyId: remoteClarifyId,
+        response: String(response).slice(0, 20_000),
+      }, (result: { resolved?: boolean; error?: string }) => {
+        clearTimeout(timer)
+        if (result?.error) reject(relayError(result.error))
+        else resolve(result?.resolved === true)
       })
     })
   }
@@ -883,10 +1011,8 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
       if (serialized.length > 1_000_000) throw relayError('Remote tool calls are too large', 'GROUP_AGENT_EVENT_INVALID')
       output.tool_calls = input.tool_calls
     }
-    const mentionDepth = Number(input.mentionDepth)
-    if (Number.isSafeInteger(mentionDepth) && mentionDepth >= 0 && mentionDepth <= 10) {
-      output.mentionDepth = mentionDepth
-    }
+    const mentions = this.sanitizeRemoteMentions(input.mentions)
+    if (mentions !== undefined) output.mentions = mentions
     return output
   }
 
@@ -899,7 +1025,65 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
       description: String(data.description || '').slice(0, 2_000),
       choices,
       allow_permanent: data.allow_permanent === true,
+      timeout_ms: this.remoteInteractionTimeout(data.timeout_ms),
     }
+  }
+
+  private sanitizeClarifyEvent(data: Record<string, unknown>): Record<string, unknown> {
+    return {
+      question: String(data.question || '').slice(0, 20_000),
+      choices: Array.isArray(data.choices)
+        ? data.choices.map(choice => String(choice).slice(0, 2_000)).slice(0, 20)
+        : null,
+      initial_response: String(data.initial_response || '').slice(0, 20_000),
+      response_mode: ['select', 'input', 'editor'].includes(String(data.response_mode || ''))
+        ? String(data.response_mode)
+        : '',
+      timeout_ms: this.remoteInteractionTimeout(data.timeout_ms),
+    }
+  }
+
+  private remoteInteractionTimeout(value: unknown): number {
+    const timeoutMs = Number(value)
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return 300_000
+    return Math.min(600_000, Math.max(1_000, Math.trunc(timeoutMs)))
+  }
+
+  private sanitizeRemoteMentions(value: unknown): StructuredMentionEntry[] | undefined {
+    if (value === undefined) return undefined
+    if (!Array.isArray(value) || value.length > 64) {
+      throw relayError('Invalid remote structured mentions', 'GROUP_AGENT_EVENT_INVALID')
+    }
+    const participantIds = new Set<string>()
+    let allSeen = false
+    return value.map((rawMention) => {
+      if (!rawMention || typeof rawMention !== 'object' || Array.isArray(rawMention)) {
+        throw relayError('Invalid remote structured mentions', 'GROUP_AGENT_EVENT_INVALID')
+      }
+      const mention = rawMention as Record<string, unknown>
+      if (mention.type === 'all') {
+        if (allSeen || value.length !== 1 || mention.displayName !== 'all') {
+          throw relayError('Invalid remote structured mentions', 'GROUP_AGENT_EVENT_INVALID')
+        }
+        allSeen = true
+        return { type: 'all' as const, displayName: 'all' as const }
+      }
+      const participantId = typeof mention.participantId === 'string' ? mention.participantId.trim() : ''
+      const displayName = typeof mention.displayName === 'string' ? mention.displayName.trim() : ''
+      if (
+        mention.type !== 'agent'
+        || allSeen
+        || !participantId
+        || participantId.length > 240
+        || participantIds.has(participantId)
+        || !displayName
+        || displayName.length > 120
+      ) {
+        throw relayError('Invalid remote structured mentions', 'GROUP_AGENT_EVENT_INVALID')
+      }
+      participantIds.add(participantId)
+      return { type: 'agent' as const, participantId, displayName }
+    })
   }
 
   disconnect(): void {
@@ -916,9 +1100,30 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
     if (!pending || pending.runId !== runId) return
     clearTimeout(pending.acceptedTimer)
     clearTimeout(pending.runTimer)
+    if (pending.approvalIds.size > 0 || pending.clarifyIds.size > 0) {
+      this.expirePendingInteractions(
+        pending.roomId,
+        this.name,
+        [...pending.approvalIds.keys()],
+        [...pending.clarifyIds.keys()],
+        error?.message || 'Remote Agent run ended',
+      )
+      pending.approvalIds.clear()
+      pending.clarifyIds.clear()
+    }
     this.pendingRun = null
     this.activeSessions.delete(pending.roomId)
-    if (error) pending.reject(error)
+    if (error) {
+      const relayFailure = error as Error & { code?: string; outcomeUnknown?: boolean }
+      // A run.failed event is an authoritative remote terminal result. Every
+      // other source-side termination after run.request was emitted (timeout,
+      // disconnect, interrupt without acknowledgement, invalid/missing event)
+      // cannot prove that the remote invocation stopped.
+      if (relayFailure.code !== 'GROUP_AGENT_REMOTE_RUN_FAILED') {
+        relayFailure.outcomeUnknown = true
+      }
+      pending.reject(relayFailure)
+    }
     else pending.resolve()
   }
 }
@@ -1066,6 +1271,7 @@ export class GroupAgentRelayServer {
           })
         },
       })
+      proxy.setStorage(storage)
       await proxy.connect()
       await proxy.joinRoom(roomAgent.roomId)
 
@@ -1091,7 +1297,22 @@ export class GroupAgentRelayServer {
       previous?.disconnect()
       const previousSocket = this.connectorSockets.get(connector.id)
       if (previousSocket && previousSocket.id !== socket.id) previousSocket.disconnect(true)
-      const executor = new RelayGroupAgentExecutor(socket, proxy, connector, roomAgent, storage)
+      const executor = new RelayGroupAgentExecutor(
+        socket,
+        proxy,
+        connector,
+        roomAgent,
+        storage,
+        (roomId, agentName, approvalIds, clarifyIds, reason) => {
+          this.groupChatServer.expirePendingAgentInteractions(
+            roomId,
+            agentName,
+            approvalIds,
+            clarifyIds,
+            reason,
+          )
+        },
+      )
       this.groupChatServer.agentClients.registerAgentForRoom(connector.roomId, executor)
       this.executors.set(connector.id, executor)
       this.connectorSockets.set(connector.id, socket)
@@ -1165,6 +1386,7 @@ export class GroupAgentRelayServer {
             if (!updated || updated.executorType !== 'remote' || updated.connectorId !== connector!.id) {
               throw relayError('Remote Agent registration no longer exists', 'GROUP_AGENT_REGISTRATION_MISSING')
             }
+            executor.updateConfiguration(updated)
             lastAgentConfigUpdateAt = now
             const agent = normalizeRemoteGroupAgentDescriptor(updated)
             this.groupChatServer.broadcastRoomAgents(connector!.roomId)
@@ -1195,12 +1417,14 @@ export class GroupAgentRelayServer {
         revokeGroupAgentConnector(connector!.id, Date.now(), { notify: false })
         ack?.({ ok: true })
         queueMicrotask(() => {
-          this.groupChatServer.agentClients.removeAgentFromRoom(connector!.roomId, connector!.agentId)
-          storage.removeRoomAgent(connector!.roomId, connector!.roomAgentId)
-          this.groupChatServer.broadcastRoomAgents(connector!.roomId)
+          void (async () => {
+            await this.groupChatServer.agentClients.removeAgentFromRoom(connector!.roomId, connector!.agentId)
+            storage.removeRoomAgent(connector!.roomId, connector!.roomAgentId)
+            this.groupChatServer.broadcastRoomAgents(connector!.roomId)
+          })()
         })
       })
-      socket.on('disconnect', () => this.handleDisconnect(connector!.id, connector!.roomId, executor))
+      socket.on('disconnect', () => { void this.handleDisconnect(connector!.id, connector!.roomId, executor) })
     } catch (error) {
       proxy?.disconnect()
       if (pairingRequestId) releaseGroupAgentPairingClaim(pairingRequestId)
@@ -1217,13 +1441,13 @@ export class GroupAgentRelayServer {
     }
   }
 
-  private handleDisconnect(connectorId: string, roomId: string, executor: RelayGroupAgentExecutor): void {
+  private async handleDisconnect(connectorId: string, roomId: string, executor: RelayGroupAgentExecutor): Promise<void> {
     const socket = this.connectorSockets.get(connectorId)
     if (socket?.data?.executor === executor) this.connectorSockets.delete(connectorId)
     if (this.executors.get(connectorId) !== executor) return
     this.executors.delete(connectorId)
     touchGroupAgentConnector(connectorId, 'offline')
-    this.groupChatServer.agentClients.removeAgentFromRoom(roomId, executor.agentId)
+    await this.groupChatServer.agentClients.removeAgentFromRoom(roomId, executor.agentId)
     this.groupChatServer.broadcastRoomAgents(roomId)
   }
 }
@@ -1517,6 +1741,27 @@ class OutboundRelayConnection {
           }
         } catch (error) {
           ack?.({ error: error instanceof Error ? error.message : 'Approval response failed' })
+        }
+      },
+    )
+    socket.on(
+      'clarify.respond',
+      async (data: { clarifyId?: string; response?: string }, ack?: (response: Record<string, unknown>) => void) => {
+        const sessionId = this.activeRequest && this.runner?.getActiveSessionId(this.activeRequest.room.id)
+        if (!sessionId || !data?.clarifyId) {
+          ack?.({ error: 'Clarification is not pending for an active remote run' })
+          return
+        }
+        try {
+          if (this.link.agent.agent === 'ekko') {
+            const result = respondToEkkoClarification(sessionId, data.clarifyId, data.response || '')
+            ack?.({ resolved: Boolean(result?.resolved) })
+          } else {
+            const result = await new AgentBridgeClient().clarifyRespond(data.clarifyId, data.response || '')
+            ack?.({ resolved: Boolean((result as any)?.resolved) })
+          }
+        } catch (error) {
+          ack?.({ error: error instanceof Error ? error.message : 'Clarification response failed' })
         }
       },
     )

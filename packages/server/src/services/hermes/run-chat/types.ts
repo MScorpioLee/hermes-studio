@@ -77,6 +77,23 @@ export interface BackgroundDelegationState {
   dispatchPayload?: Record<string, unknown>
 }
 
+export type QueueInsertionRuntime = 'hermes' | 'ekko'
+export type QueueInsertionPhase =
+  | 'requesting'
+  | 'waiting_for_tool_batch'
+  | 'stopping_current_turn'
+  | 'starting_queued_message'
+
+export interface QueueInsertionControl {
+  generation: string
+  queueId: string
+  runId?: string
+  runtime: QueueInsertionRuntime
+  phase: QueueInsertionPhase
+  guarantee: 'strict'
+  requestedAt: number
+}
+
 export interface SessionState {
   messages: SessionMessage[]
   messageTotal?: number
@@ -95,9 +112,10 @@ export interface SessionState {
   bridgeContext?: BridgeContextState
   isAborting?: boolean
   queue: QueuedRun[]
+  queueInsertion?: QueueInsertionControl
   responseRun?: ResponseRunState
   source?: ChatRunSource
-  webhookAgent?: 'bridge' | 'ekko' | 'claude-code' | 'codex'
+  webhookAgent?: 'bridge' | 'ekko' | 'claude-code' | 'codex' | 'pi'
   webhookRoomId?: string
   webhookWorkflowId?: string
   webhookWorkflowNodeId?: string
@@ -143,7 +161,7 @@ export interface BridgeContextState {
 }
 
 export type ChatRunSource = 'api_server' | 'cli' | 'coding_agent' | 'global_agent' | 'workflow' | 'group_chat'
-export type ChatCodingAgentId = 'claude-code' | 'codex' | 'ekko-agent'
+export type ChatCodingAgentId = 'claude-code' | 'codex' | 'pi' | 'ekko-agent'
 
 export interface BridgeCompressionResult {
   messages: ChatMessage[]
