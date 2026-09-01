@@ -143,7 +143,7 @@ describe('fnOS lifecycle scripts', { timeout: 15_000 }, () => {
     }
   })
 
-  it('uses the python venv from a schema 2 downloaded runtime', () => {
+  it('uses downloaded runtime Python while keeping the bundled Node runtime', () => {
     const dir = mkdtempSync(join(tmpdir(), 'hermes-fnos-runtime-'))
     const varDir = join(dir, 'var')
     const platform = process.platform === 'darwin' ? `mac-${process.arch}` : `${process.platform}-${process.arch}`
@@ -168,14 +168,19 @@ describe('fnOS lifecycle scripts', { timeout: 15_000 }, () => {
         `source ${shellQuote(join(root, 'fnos', 'hermes-studio', 'cmd', 'common'))}`,
         `VAR_DIR=${shellQuote(varDir)}`,
         `ACTIVE_VERSION_FILE=${shellQuote(activeVersionFile)}`,
+        'BUNDLED_NODE_ROOT="/bundled/node"',
         `BUNDLED_NODE_BIN=${shellQuote(process.execPath)}`,
+        'NODE_ROOT="$BUNDLED_NODE_ROOT"',
+        'NODE_BIN="$BUNDLED_NODE_BIN"',
         `printf '{"schema":1,"platform":"%s","hermesRuntimeVersion":"0.20.0","runtimeDirectory":"%s"}\\n' ${shellQuote(platform)} ${shellQuote(runtimeDir)} > "$ACTIVE_VERSION_FILE"`,
         'apply_active_version_overrides',
-        'printf "RUNTIME_VERSION=%s\\nRUNTIME_ROOT=%s\\nPYTHON_SOURCE_ROOT=%s\\nPYTHON_HOME=%s\\nPYTHON_BIN=%s\\nHERMES_BIN=%s\\n" "$RUNTIME_VERSION_VALUE" "$RUNTIME_ROOT" "$PYTHON_SOURCE_ROOT" "$PYTHON_HOME" "$PYTHON_BIN" "$HERMES_BIN_VALUE"',
+        'printf "RUNTIME_VERSION=%s\\nRUNTIME_ROOT=%s\\nNODE_ROOT=%s\\nNODE_BIN=%s\\nPYTHON_SOURCE_ROOT=%s\\nPYTHON_HOME=%s\\nPYTHON_BIN=%s\\nHERMES_BIN=%s\\n" "$RUNTIME_VERSION_VALUE" "$RUNTIME_ROOT" "$NODE_ROOT" "$NODE_BIN" "$PYTHON_SOURCE_ROOT" "$PYTHON_HOME" "$PYTHON_BIN" "$HERMES_BIN_VALUE"',
       ].join('; ')], { encoding: 'utf-8' })
 
       expect(output).toContain('RUNTIME_VERSION=0.20.0')
       expect(output).toContain(`RUNTIME_ROOT=${realpathSync(runtimeDir)}`)
+      expect(output).toContain('NODE_ROOT=/bundled/node')
+      expect(output).toContain(`NODE_BIN=${process.execPath}`)
       expect(output).toContain(`PYTHON_SOURCE_ROOT=${realpathSync(join(runtimeDir, 'python'))}`)
       expect(output).toContain(`PYTHON_HOME=${realpathSync(pythonHome)}`)
       expect(output).toContain(`PYTHON_BIN=${realpathSync(join(pythonHome, 'bin', 'python3'))}`)

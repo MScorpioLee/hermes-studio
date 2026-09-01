@@ -254,8 +254,6 @@ apply_active_version_overrides() {
             RUNTIME_VERSION_VALUE="$runtime_version"
         fi
         RUNTIME_ROOT="$runtime_dir"
-        NODE_ROOT="${runtime_dir}/node"
-        NODE_BIN="${NODE_ROOT}/bin/node"
         PYTHON_SOURCE_ROOT="${runtime_dir}/python"
         PYTHON_HOME="$(runtime_python_home "$runtime_dir")"
         PYTHON_BIN="${PYTHON_HOME}/bin/python3"
