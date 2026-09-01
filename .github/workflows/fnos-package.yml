@@ -6,15 +6,15 @@ on:
       hermes_version:
         description: "hermes-agent version to bundle"
         required: false
-        default: "0.20.6"
+        default: "0.20.0"
       hermes_source_ref:
         description: "Pinned hermes-agent Git tag/ref"
         required: false
-        default: "v2026.8.27"
+        default: "v2026.8.3"
       hermes_source_commit:
         description: "Pinned full hermes-agent Git commit"
         required: false
-        default: "5fc308a70719a83cccdbba4c0e39c23f5a8239d5"
+        default: "3c27eb6234bf91b8ceee9e9071591b31e9b148cb"
 
 permissions:
   contents: write
@@ -51,7 +51,7 @@ jobs:
         env:
           TARGET_OS: linux
           TARGET_ARCH: x64
-          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.20.6' }}
+          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.20.0' }}
           HERMES_SOURCE_REF: ${{ github.event.inputs.hermes_source_ref }}
           HERMES_SOURCE_COMMIT: ${{ github.event.inputs.hermes_source_commit }}
           HERMES_DESKTOP_NODE_VERSION: 24.15.0
@@ -74,7 +74,7 @@ jobs:
           FNPACK_BIN: /tmp/fnpack
           FNOS_TARGET_OS: linux
           FNOS_TARGET_ARCH: x64
-          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.20.6' }}
+          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.20.0' }}
           HERMES_SOURCE_REF: ${{ github.event.inputs.hermes_source_ref }}
           HERMES_SOURCE_COMMIT: ${{ github.event.inputs.hermes_source_commit }}
           HERMES_DESKTOP_NODE_VERSION: 24.15.0
@@ -84,7 +84,7 @@ jobs:
       - name: Create fnOS release metadata
         id: package_meta
         env:
-          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.20.6' }}
+          HERMES_VERSION: ${{ github.event.inputs.hermes_version || '0.20.0' }}
         shell: bash
         run: |
           set -euo pipefail
