@@ -171,9 +171,10 @@ describe('fnOS lifecycle scripts', { timeout: 15_000 }, () => {
         `BUNDLED_NODE_BIN=${shellQuote(process.execPath)}`,
         `printf '{"schema":1,"platform":"%s","hermesRuntimeVersion":"0.20.0","runtimeDirectory":"%s"}\\n' ${shellQuote(platform)} ${shellQuote(runtimeDir)} > "$ACTIVE_VERSION_FILE"`,
         'apply_active_version_overrides',
-        'printf "RUNTIME_ROOT=%s\\nPYTHON_SOURCE_ROOT=%s\\nPYTHON_HOME=%s\\nPYTHON_BIN=%s\\nHERMES_BIN=%s\\n" "$RUNTIME_ROOT" "$PYTHON_SOURCE_ROOT" "$PYTHON_HOME" "$PYTHON_BIN" "$HERMES_BIN_VALUE"',
+        'printf "RUNTIME_VERSION=%s\\nRUNTIME_ROOT=%s\\nPYTHON_SOURCE_ROOT=%s\\nPYTHON_HOME=%s\\nPYTHON_BIN=%s\\nHERMES_BIN=%s\\n" "$RUNTIME_VERSION_VALUE" "$RUNTIME_ROOT" "$PYTHON_SOURCE_ROOT" "$PYTHON_HOME" "$PYTHON_BIN" "$HERMES_BIN_VALUE"',
       ].join('; ')], { encoding: 'utf-8' })
 
+      expect(output).toContain('RUNTIME_VERSION=0.20.0')
       expect(output).toContain(`RUNTIME_ROOT=${realpathSync(runtimeDir)}`)
       expect(output).toContain(`PYTHON_SOURCE_ROOT=${realpathSync(join(runtimeDir, 'python'))}`)
       expect(output).toContain(`PYTHON_HOME=${realpathSync(pythonHome)}`)

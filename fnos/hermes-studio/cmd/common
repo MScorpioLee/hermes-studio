@@ -178,6 +178,26 @@ runtime_dir_ready() {
         && [ -f "${root}/runtime-manifest.json" ]
 }
 
+read_runtime_manifest_version() {
+    local root="$1"
+    [ -f "${root}/runtime-manifest.json" ] || return 1
+    ensure_executable "$BUNDLED_NODE_BIN" || return 1
+
+    "$BUNDLED_NODE_BIN" -e '
+const fs = require("fs");
+const path = require("path");
+const root = process.argv[1];
+try {
+  const data = JSON.parse(fs.readFileSync(path.join(root, "runtime-manifest.json"), "utf8"));
+  const version = typeof data.hermesAgentVersion === "string" ? data.hermesAgentVersion.trim() : "";
+  if (!version) process.exit(2);
+  process.stdout.write(version.replace(/^v/, ""));
+} catch {
+  process.exit(1);
+}
+' "$root"
+}
+
 webui_dir_ready() {
     local root="$1"
     [ -n "$root" ] \
@@ -225,10 +245,14 @@ try {
 }
 
 apply_active_version_overrides() {
-    local runtime_dir webui_dir
+    local runtime_dir runtime_version webui_dir
 
     runtime_dir="$(read_active_version_field runtimeDirectory "${VAR_DIR}/hermes-web-ui/desktop-runtime/hermes" 2>/dev/null || true)"
     if runtime_dir_ready "$runtime_dir"; then
+        runtime_version="$(read_runtime_manifest_version "$runtime_dir" 2>/dev/null || true)"
+        if [ -n "$runtime_version" ]; then
+            RUNTIME_VERSION_VALUE="$runtime_version"
+        fi
         RUNTIME_ROOT="$runtime_dir"
         NODE_ROOT="${runtime_dir}/node"
         NODE_BIN="${NODE_ROOT}/bin/node"

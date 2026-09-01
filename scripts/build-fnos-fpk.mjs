@@ -125,6 +125,14 @@ async function writeRuntimeMetadata() {
   await writeFile(commonScriptPath, patchBundledHermesVersion(commonScript, bundledHermesVersion))
 }
 
+async function syncVersionManifestFallback() {
+  const sourceManifest = path.join(sourceDir, 'webui-versions.json')
+  const fallbackManifest = path.join(stageDir, 'config', 'version-manifest.json')
+  ensureFile(sourceManifest)
+  await mkdir(path.dirname(fallbackManifest), { recursive: true })
+  await copyFile(sourceManifest, fallbackManifest)
+}
+
 async function syncIcons() {
   const icon64 = path.join(root, 'packages', 'desktop', 'build', 'icons', '64x64.png')
   const icon256 = path.join(root, 'packages', 'desktop', 'build', 'icons', '256x256.png')
@@ -353,6 +361,7 @@ await makeCommandScriptsExecutable()
 await syncIcons()
 await writePatchedManifest()
 await writeRuntimeMetadata()
+await syncVersionManifestFallback()
 await copyServer()
 await copyRuntime()
 await materializePackageSymlinks(stageDir)

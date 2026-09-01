@@ -137,6 +137,86 @@ describe('runtime version manager', () => {
     expect(status.hermes.agentVersion).toBe('v2026.8.1')
   })
 
+  it('uses the packaged version manifest when every remote source fails', async () => {
+    const fallbackFile = join(tempDir(), 'versions.json')
+    writeFileSync(fallbackFile, JSON.stringify({
+      schema: 1,
+      hermes: ['0.20.6'],
+      webui: ['0.6.44'],
+    }))
+    process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL = 'https://primary.test/versions.json'
+    process.env.HERMES_WEB_UI_VERSION_MANIFEST_FALLBACK_FILE = fallbackFile
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network unavailable')))
+
+    const { getRuntimeVersionStatus } = await import('../../packages/server/src/services/runtime-version-manager')
+    const status = await getRuntimeVersionStatus()
+
+    expect(status.hermes.remoteVersions).toEqual(['0.20.6'])
+    expect(status.webui.remoteVersions).toEqual(['0.6.44'])
+    expect(status.remoteError).toBe('')
+  })
+
+  it('tries configured remote manifest fallbacks before using the packaged file', async () => {
+    process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL = 'https://primary.test/versions.json'
+    process.env.HERMES_WEB_UI_VERSION_MANIFEST_FALLBACK_URLS = [
+      'https://fallback-one.test/versions.json',
+      'https://fallback-two.test/versions.json',
+    ].join(',')
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary unavailable'))
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        hermes: ['0.20.7'],
+        webui: ['0.6.45'],
+      }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { getRuntimeVersionStatus } = await import('../../packages/server/src/services/runtime-version-manager')
+    const status = await getRuntimeVersionStatus()
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock.mock.calls.map(call => String(call[0]))).toEqual([
+      'https://primary.test/versions.json',
+      'https://fallback-one.test/versions.json',
+      'https://fallback-two.test/versions.json',
+    ])
+    expect(status.hermes.remoteVersions).toEqual(['0.20.7'])
+    expect(status.webui.remoteVersions).toEqual(['0.6.45'])
+    expect(status.remoteError).toBe('')
+  })
+
+  it('starts fallback manifest requests without waiting for the primary timeout', async () => {
+    process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL = 'https://primary.test/versions.json'
+    process.env.HERMES_WEB_UI_VERSION_MANIFEST_FALLBACK_URLS = 'https://fallback.test/versions.json'
+    let rejectPrimary = (_reason?: unknown) => {}
+    const primaryRequest = new Promise<Response>((_resolve, reject) => {
+      rejectPrimary = reject
+    })
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      if (String(input).includes('primary.test')) return primaryRequest
+      return Promise.resolve(new Response(JSON.stringify({
+        hermes: ['0.20.7'],
+        webui: ['0.6.45'],
+      }), { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { getRuntimeVersionStatus } = await import('../../packages/server/src/services/runtime-version-manager')
+    const statusPromise = getRuntimeVersionStatus()
+    let concurrencyError: unknown
+    try {
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 200 })
+    } catch (err) {
+      concurrencyError = err
+    }
+    rejectPrimary(new Error('primary unavailable'))
+    const status = await statusPromise
+
+    if (concurrencyError) throw concurrencyError
+    expect(status.hermes.remoteVersions).toEqual(['0.20.7'])
+    expect(status.webui.remoteVersions).toEqual(['0.6.45'])
+  })
+
   it('reports the current packaged runtime when no downloaded runtime is active', async () => {
     const runtimeRoot = tempDir()
     createRuntimeRoot(runtimeRoot)

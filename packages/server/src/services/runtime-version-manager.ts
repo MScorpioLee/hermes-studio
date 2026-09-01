@@ -432,13 +432,36 @@ function currentRuntimeVersionRecord(active: ActiveVersionManifest | null): Inst
 }
 
 async function fetchRemoteVersions(): Promise<{ manifest: RemoteVersionManifest | null; error: string }> {
-  const url = process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || defaultRemoteManifestUrl()
+  const primaryUrl = process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || defaultRemoteManifestUrl()
+  const fallbackUrls = (process.env.HERMES_WEB_UI_VERSION_MANIFEST_FALLBACK_URLS || '')
+    .split(',')
+    .map(url => url.trim())
+    .filter(Boolean)
+  const urls = [...new Set([primaryUrl, ...fallbackUrls])]
+  const requests = urls.map(async (url) => {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
+      if (!response.ok) throw new Error(`GET ${url} returned ${response.status}`)
+      return await response.json() as RemoteVersionManifest
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new Error(message.startsWith(`GET ${url}`) ? message : `GET ${url} failed: ${message}`)
+    }
+  })
+
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
-    if (!response.ok) return { manifest: null, error: `GET ${url} returned ${response.status}` }
-    return { manifest: await response.json() as RemoteVersionManifest, error: '' }
+    return { manifest: await Promise.any(requests), error: '' }
   } catch (err) {
-    return { manifest: null, error: err instanceof Error ? err.message : String(err) }
+    const failures = err instanceof AggregateError ? err.errors : [err]
+    const errors = failures.map(failure => failure instanceof Error ? failure.message : String(failure))
+
+    const fallbackFile = process.env.HERMES_WEB_UI_VERSION_MANIFEST_FALLBACK_FILE?.trim()
+    if (fallbackFile) {
+      const manifest = readJsonFile<RemoteVersionManifest>(fallbackFile)
+      if (manifest) return { manifest, error: '' }
+    }
+
+    return { manifest: null, error: errors.join('; ') || 'No version manifest source is configured' }
   }
 }
 
