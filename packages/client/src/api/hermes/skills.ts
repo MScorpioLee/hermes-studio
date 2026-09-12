@@ -1,4 +1,4 @@
-import { request, getBaseUrlValue, getApiKey, getActiveProfileName } from '../client'
+import { request, getBaseUrlValue, getApiKey, getActiveProfileName, setHermesAuthorizationHeader } from '../client'
 
 export type SkillSource = 'builtin' | 'hub' | 'local' | 'external'
 export type SkillTarget = 'hermes' | 'claude' | 'codex' | 'pi'
@@ -199,7 +199,7 @@ export async function importSkill(files: File[], category?: string): Promise<{ n
   const baseUrl = getBaseUrlValue()
   const token = getApiKey()
   const headers: Record<string, string> = {}
-  if (token) headers['Authorization'] = `Bearer ${token}`
+  setHermesAuthorizationHeader(headers, token)
   const profile = getActiveProfileName()
   if (profile) headers['X-Hermes-Profile'] = profile
 

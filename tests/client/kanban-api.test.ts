@@ -11,6 +11,9 @@ vi.mock('../../packages/client/src/api/client', () => ({
   getApiKey: mockGetApiKey,
   getBaseUrlValue: mockGetBaseUrlValue,
   buildWebSocketUrl: mockBuildWebSocketUrl,
+  setHermesTokenQuery: (params: URLSearchParams, token: string) => {
+    if (token) params.set('token', token)
+  },
 }))
 
 import {

@@ -1,4 +1,4 @@
-import { request, getApiKey, getBaseUrlValue } from '../client'
+import { request, getApiKey, getBaseUrlValue, setHermesTokenQuery } from '../client'
 import type { ProviderApiMode } from './system'
 import { fetchAuthenticatedBlob, saveBlob } from './binary-content'
 
@@ -557,7 +557,9 @@ export async function setSessionModel(id: string, model: string, provider: strin
 export async function exportSession(id: string, mode: 'full' | 'compressed' = 'full', ext: 'json' | 'txt' = 'json'): Promise<void> {
   const baseUrl = getBaseUrlValue()
   const token = getApiKey()
-  const url = `${baseUrl}/api/hermes/sessions/${id}/export?mode=${mode}&ext=${ext}&token=${encodeURIComponent(token)}`
+  const params = new URLSearchParams({ mode, ext })
+  setHermesTokenQuery(params, token)
+  const url = `${baseUrl}/api/hermes/sessions/${id}/export?${params.toString()}`
   const res = await fetch(url)
   if (!res.ok) throw new Error('Export failed')
   const blob = await res.blob()

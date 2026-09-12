@@ -3,6 +3,7 @@ import {
   getApiKey,
   getBaseUrlValue,
   request,
+  setHermesAuthorizationHeader,
 } from './client'
 
 export interface UserThemeSettings {
@@ -28,7 +29,7 @@ async function themeFetch(path: string, options: RequestInit = {}): Promise<Resp
   await ensureDesktopAuthReady()
   const headers = new Headers(options.headers)
   const token = getApiKey()
-  if (token) headers.set('Authorization', `Bearer ${token}`)
+  setHermesAuthorizationHeader(headers, token)
   return fetch(`${getBaseUrlValue()}${path}`, { ...options, headers })
 }
 

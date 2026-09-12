@@ -1,4 +1,4 @@
-import { request, getApiKey, buildWebSocketUrl } from '../client'
+import { request, getApiKey, buildWebSocketUrl, setHermesTokenQuery } from '../client'
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -265,7 +265,7 @@ function boardParams(board?: string): URLSearchParams {
 export function buildKanbanEventsWebSocketUrl(opts?: KanbanBoardOptions): string {
   const params = boardParams(opts?.board)
   const token = getApiKey()
-  if (token) params.set('token', token)
+  setHermesTokenQuery(params, token)
   const profile = activeProfileName()
   if (profile) params.set('profile', profile)
   const path = `/api/hermes/kanban/events?${params.toString()}`

@@ -46,6 +46,12 @@ const clientApiMock = vi.hoisted(() => ({
   getActiveProfileName: vi.fn(() => 'research'),
   getBaseUrlValue: vi.fn(() => '/app/hermes-studio'),
   getStoredUsername: vi.fn(() => null),
+  setHermesAuthorizationHeader: vi.fn((headers: Record<string, string>, token: string) => {
+    if (token) headers.Authorization = `Bearer ${token}`
+  }),
+  setHermesTokenQuery: vi.fn((params: URLSearchParams, token: string) => {
+    if (token) params.set('token', token)
+  }),
 }))
 const authApiMock = vi.hoisted(() => ({
   fetchCurrentUser: vi.fn(),

@@ -113,8 +113,11 @@ async function getJwtSecret(): Promise<string> {
 }
 
 function requestToken(ctx: Context): string {
+  const hermesAuth = ctx.headers['x-hermes-authorization'] || ''
+  if (typeof hermesAuth === 'string' && hermesAuth.startsWith('Bearer ')) return hermesAuth.slice(7).trim()
   const auth = ctx.headers.authorization || ''
   if (typeof auth === 'string' && auth.startsWith('Bearer ')) return auth.slice(7).trim()
+  if (typeof ctx.query.hermes_token === 'string') return ctx.query.hermes_token.trim()
   return typeof ctx.query.token === 'string' ? ctx.query.token.trim() : ''
 }
 

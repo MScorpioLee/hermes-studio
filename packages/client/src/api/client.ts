@@ -28,6 +28,25 @@ function fnosGatewayCompatEnabled(): boolean {
   return false
 }
 
+export function setHermesAuthorizationHeader(
+  headers: Headers | Record<string, string>,
+  token = getApiKey(),
+): void {
+  if (!token) return
+  const name = fnosGatewayCompatEnabled() ? 'X-Hermes-Authorization' : 'Authorization'
+  const value = `Bearer ${token}`
+  if (headers instanceof Headers) {
+    headers.set(name, value)
+  } else {
+    headers[name] = value
+  }
+}
+
+export function setHermesTokenQuery(params: URLSearchParams, token = getApiKey()): void {
+  if (!token) return
+  params.set(fnosGatewayCompatEnabled() ? 'hermes_token' : 'token', token)
+}
+
 function directWebSocketPortValue(directPort?: string | number): number | null {
   const raw = String(localStorage.getItem('hermes_direct_ws_port') || directPort || '').trim()
   if (!raw) return null
@@ -219,9 +238,7 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   }
 
   const apiKey = getApiKey()
-  if (apiKey) {
-    headers['Authorization'] = `Bearer ${apiKey}`
-  }
+  setHermesAuthorizationHeader(headers, apiKey)
 
   // Inject active profile header for request-scoped endpoints. Explicit profile
   // selectors in the URL/body and profile-name routes are validated directly.
@@ -260,6 +277,12 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
       }
     }
     throw new Error(`API Error ${res.status}: ${responseErrorMessage(text, res.statusText)}`)
+  }
+
+  const contentType = res.headers?.get?.('content-type') || ''
+  if (contentType && !/(?:application|text)\/(?:[\w.+-]+\+)?json\b/i.test(contentType)) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`API Error ${res.status}: ${responseErrorMessage(text, 'Expected a JSON response')}`)
   }
 
   return res.json()

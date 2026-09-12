@@ -1,4 +1,4 @@
-import { request, getBaseUrlValue, getApiKey } from '../client'
+import { request, getBaseUrlValue, getApiKey, setHermesAuthorizationHeader } from '../client'
 
 export interface HermesProfile {
   name: string
@@ -195,7 +195,7 @@ export async function exportProfile(name: string): Promise<ProfileArchiveResult>
     const baseUrl = getBaseUrlValue()
     const token = getApiKey()
     const headers: Record<string, string> = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    setHermesAuthorizationHeader(headers, token)
 
     const res = await fetch(`${baseUrl}/api/hermes/profiles/${encodeURIComponent(name)}/export`, {
       method: 'POST',
@@ -225,7 +225,7 @@ export async function importProfile(file: File): Promise<ProfileArchiveResult> {
     const baseUrl = getBaseUrlValue()
     const token = getApiKey()
     const headers: Record<string, string> = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    setHermesAuthorizationHeader(headers, token)
 
     const formData = new FormData()
     formData.append('file', file)

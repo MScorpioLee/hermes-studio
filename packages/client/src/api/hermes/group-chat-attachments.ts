@@ -1,4 +1,4 @@
-import { getApiKey, getBaseUrlValue } from '../client'
+import { getApiKey, getBaseUrlValue, setHermesAuthorizationHeader, setHermesTokenQuery } from '../client'
 
 type GroupChatAttachmentScope = {
     roomId: string
@@ -26,7 +26,7 @@ export function getGroupChatAttachmentUrl(
     if (fileName) params.set('name', fileName)
     if (!scope.inviteCode?.trim()) {
         const token = getApiKey()
-        if (token) params.set('token', token)
+        setHermesTokenQuery(params, token)
     }
     const query = params.toString()
     return `${getBaseUrlValue()}${attachmentScopePath(scope)}/${encodeURIComponent(storedName)}${query ? `?${query}` : ''}`
@@ -43,7 +43,7 @@ export async function uploadGroupChatAttachments(
     const headers: Record<string, string> = {}
     if (!scope.inviteCode?.trim()) {
         const token = getApiKey()
-        if (token) headers.Authorization = `Bearer ${token}`
+        setHermesAuthorizationHeader(headers, token)
     }
     const res = await fetch(
         `${getBaseUrlValue()}${attachmentScopePath(scope)}`,

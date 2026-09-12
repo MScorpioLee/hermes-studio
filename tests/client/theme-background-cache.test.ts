@@ -5,6 +5,9 @@ vi.mock('@/api/client', () => ({
   getApiKey: vi.fn(() => 'theme-token'),
   getBaseUrlValue: vi.fn(() => ''),
   request: vi.fn(),
+  setHermesAuthorizationHeader: (headers: Headers, token: string) => {
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+  },
 }))
 
 import {

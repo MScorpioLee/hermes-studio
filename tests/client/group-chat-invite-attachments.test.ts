@@ -6,6 +6,12 @@ const fetchMock = vi.hoisted(() => vi.fn())
 vi.mock('@/api/client', () => ({
   getBaseUrlValue: () => 'https://chat.example.test',
   getApiKey: () => 'account-token',
+  setHermesAuthorizationHeader: (headers: Record<string, string>, token: string) => {
+    if (token) headers.Authorization = `Bearer ${token}`
+  },
+  setHermesTokenQuery: (params: URLSearchParams, token: string) => {
+    if (token) params.set('token', token)
+  },
 }))
 vi.stubGlobal('fetch', fetchMock)
 

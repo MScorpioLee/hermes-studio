@@ -1,4 +1,4 @@
-import { getActiveProfileName, getApiKey, getBaseUrlValue } from '../client'
+import { getActiveProfileName, getApiKey, getBaseUrlValue, setHermesTokenQuery } from '../client'
 
 function safeDecodeURIComponent(value: string): string {
   try {
@@ -76,7 +76,7 @@ export function getDownloadUrl(filePath: string, fileName?: string, profile?: st
   const profileName = profile === undefined ? getActiveProfileName() : explicitProfile
   if (profileName) params.set('profile', profileName)
   const token = getApiKey()
-  if (token) params.set('token', token)
+  setHermesTokenQuery(params, token)
   return `${base}/api/hermes/download?${params.toString()}`
 }
 

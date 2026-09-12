@@ -235,6 +235,55 @@ describe('user auth tables and middleware', () => {
     expect(ctx.state.serverTokenAuth).toBe(true)
   })
 
+  it('accepts a signed user JWT from the fnOS-safe Hermes authorization header', async () => {
+    const { users, auth } = await initUsers()
+    const user = users.bootstrapDefaultSuperAdmin('admin', '123456')
+    const token = await auth.issueUserJwt(user!)
+    const ctx = {
+      path: '/api/hermes/sessions',
+      headers: {
+        authorization: 'Bearer fnos-gateway-token',
+        'x-hermes-authorization': `Bearer ${token}`,
+      },
+      query: {},
+      ip: '127.0.0.1',
+      request: { ip: '127.0.0.1', body: {} },
+      req: { socket: { remoteAddress: '127.0.0.1' } },
+      state: {},
+      status: 200,
+      body: null,
+    } as any
+    const next = vi.fn(async () => {})
+
+    await auth.requireUserJwt(ctx, next)
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(ctx.state.user).toMatchObject({ id: user!.id, username: 'admin', role: 'super_admin' })
+  })
+
+  it('accepts a signed user JWT from the fnOS-safe Hermes query parameter', async () => {
+    const { users, auth } = await initUsers()
+    const user = users.bootstrapDefaultSuperAdmin('admin', '123456')
+    const token = await auth.issueUserJwt(user!)
+    const ctx = {
+      path: '/api/hermes/download',
+      headers: {},
+      query: { hermes_token: token },
+      ip: '127.0.0.1',
+      request: { ip: '127.0.0.1', body: {} },
+      req: { socket: { remoteAddress: '127.0.0.1' } },
+      state: {},
+      status: 200,
+      body: null,
+    } as any
+    const next = vi.fn(async () => {})
+
+    await auth.requireUserJwt(ctx, next)
+
+    expect(next).toHaveBeenCalledOnce()
+    expect(ctx.state.user).toMatchObject({ id: user!.id, username: 'admin', role: 'super_admin' })
+  })
+
   it.each([
     '/api/hermes/media/apikey-image-generate',
     '/api/hermes/media/grok-image-to-video',

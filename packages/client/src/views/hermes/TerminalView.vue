@@ -4,7 +4,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
-import { buildWebSocketUrl, getApiKey } from "@/api/client";
+import { buildWebSocketUrl, getApiKey, setHermesTokenQuery } from "@/api/client";
 import { NButton, NPopconfirm, NTooltip, NSelect, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import type { ITheme } from "@xterm/xterm";
@@ -269,8 +269,10 @@ const terminalBg = computed(
 // ─── WebSocket ──────────────────────────────────────────────────
 
 function buildWsUrl(): string {
-  const token = getApiKey();
-  const path = `/api/hermes/terminal${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+  const params = new URLSearchParams();
+  setHermesTokenQuery(params, getApiKey());
+  const query = params.toString();
+  const path = `/api/hermes/terminal${query ? `?${query}` : ""}`;
   return buildWebSocketUrl(path, import.meta.env.VITE_HERMES_DIRECT_WS_PORT);
 }
 

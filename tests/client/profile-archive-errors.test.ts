@@ -5,6 +5,9 @@ vi.mock('@/api/client', () => ({
   request: vi.fn(),
   getBaseUrlValue: () => 'http://studio.local',
   getApiKey: () => 'token',
+  setHermesAuthorizationHeader: (headers: Record<string, string>, token: string) => {
+    if (token) headers.Authorization = `Bearer ${token}`
+  },
 }))
 
 import { exportProfile, importProfile } from '@/api/hermes/profiles'

@@ -1,4 +1,10 @@
-import { ensureDesktopAuthReady, getActiveProfileName, getApiKey, getBaseUrlValue } from '../client'
+import {
+  ensureDesktopAuthReady,
+  getActiveProfileName,
+  getApiKey,
+  getBaseUrlValue,
+  setHermesAuthorizationHeader,
+} from '../client'
 
 function errorMessage(value: unknown, fallback: string): string {
   if (!value || typeof value !== 'object') return fallback
@@ -13,7 +19,7 @@ export async function fetchAuthenticatedBlob(
   await ensureDesktopAuthReady()
   const headers: Record<string, string> = {}
   const apiKey = getApiKey()
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+  setHermesAuthorizationHeader(headers, apiKey)
   const profile = typeof options.profile === 'string' && options.profile.trim()
     ? options.profile.trim()
     : getActiveProfileName()

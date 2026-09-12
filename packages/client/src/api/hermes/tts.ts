@@ -1,4 +1,4 @@
-import { getActiveProfileName, getApiKey } from '../client'
+import { getActiveProfileName, getApiKey, setHermesAuthorizationHeader } from '../client'
 
 export interface TtsOptions {
   text: string
@@ -63,9 +63,7 @@ function ttsHeaders(explicitProfile?: string): Record<string, string> {
     'Content-Type': 'application/json',
   }
   const apiKey = getApiKey()
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`
-  }
+  setHermesAuthorizationHeader(headers, apiKey)
   const profile = explicitProfile?.trim() || getActiveProfileName()
   if (profile) {
     headers['X-Hermes-Profile'] = profile

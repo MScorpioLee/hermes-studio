@@ -1,4 +1,11 @@
-import { request, getActiveProfileName, getApiKey, getBaseUrlValue } from '../client'
+import {
+  request,
+  getActiveProfileName,
+  getApiKey,
+  getBaseUrlValue,
+  setHermesAuthorizationHeader,
+  setHermesTokenQuery,
+} from '../client'
 import { fetchAuthenticatedBlob } from './binary-content'
 
 export interface FileEntry {
@@ -99,7 +106,7 @@ export async function uploadFiles(targetDir: string, files: File[], profile?: st
 
   const headers: Record<string, string> = {}
   const token = getApiKey()
-  if (token) headers['Authorization'] = `Bearer ${token}`
+  setHermesAuthorizationHeader(headers, token)
   const explicitProfile = normalizeProfile(profile)
   const profileName = explicitProfile || getActiveProfileName()
   if (profileName && !explicitProfile) headers['X-Hermes-Profile'] = profileName
@@ -122,7 +129,7 @@ export async function uploadRuntimeFiles(files: File[]): Promise<{ name: string;
 
   const headers: Record<string, string> = {}
   const token = getApiKey()
-  if (token) headers.Authorization = `Bearer ${token}`
+  setHermesAuthorizationHeader(headers, token)
   const profileName = getActiveProfileName()
   if (profileName) headers['X-Hermes-Profile'] = profileName
 
@@ -143,7 +150,7 @@ export function getFileDownloadUrl(relativePath: string, fileName?: string, prof
   const profileName = profile === undefined ? getActiveProfileName() : explicitProfile
   if (profileName) params.set('profile', profileName)
   const token = getApiKey()
-  if (token) params.set('token', token)
+  setHermesTokenQuery(params, token)
   return `${base}/api/hermes/download?${params.toString()}`
 }
 

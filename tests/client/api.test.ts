@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
@@ -29,6 +29,10 @@ describe('API Client', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   describe('token management', () => {
@@ -75,6 +79,19 @@ describe('API Client', () => {
       expect(mockFetch).toHaveBeenCalledOnce()
       const [, options] = mockFetch.mock.calls[0]
       expect(options.headers.Authorization).toBe('Bearer secret-key')
+    })
+
+    it('keeps the standard Authorization header free for the fnOS gateway', async () => {
+      vi.stubEnv('VITE_HERMES_FNOS_GATEWAY_COMPAT', '1')
+      setApiKey('secret-key')
+      mockFetch.mockResolvedValue({ ok: true, status: 200, json: () => ({ data: 1 }) })
+
+      await request('/api/hermes/sessions')
+
+      const [, options] = mockFetch.mock.calls[0]
+      expect(options.headers.Authorization).toBeUndefined()
+      expect(options.headers['X-Hermes-Authorization']).toBe('Bearer secret-key')
+      vi.unstubAllEnvs()
     })
 
     it('adds the active profile header, including default', async () => {
@@ -189,6 +206,17 @@ describe('API Client', () => {
       const result = await request('/api/hermes/sessions')
       expect(result).toEqual(data)
     })
+
+    it('reports a successful non-JSON gateway response without leaking a JSON.parse error', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'Content-Type': 'text/plain; charset=utf-8' }),
+        text: () => Promise.resolve('invalid token'),
+      })
+
+      await expect(request('/api/hermes/sessions')).rejects.toThrow('API Error 200: invalid token')
+    })
   })
 
   describe('download URLs', () => {
@@ -215,6 +243,17 @@ describe('API Client', () => {
       expect(url.searchParams.get('name')).toBe('reviewer.txt')
       expect(url.searchParams.get('profile')).toBe('reviewer')
       expect(url.searchParams.get('token')).toBe('secret-key')
+    })
+
+    it('keeps the fnOS gateway token query parameter separate from the Hermes token', () => {
+      vi.stubEnv('VITE_HERMES_FNOS_GATEWAY_COMPAT', '1')
+      setApiKey('secret-key')
+
+      const url = new URL(getDownloadUrl('/tmp/report.txt', 'report.txt'), 'http://localhost')
+
+      expect(url.searchParams.get('token')).toBeNull()
+      expect(url.searchParams.get('hermes_token')).toBe('secret-key')
+      vi.unstubAllEnvs()
     })
 
     it('handles raw percent signs in download paths and filenames', () => {
@@ -329,6 +368,23 @@ describe('API Client', () => {
       expect(options.headers.Authorization).toBe('Bearer secret-key')
       expect(options.headers['X-Hermes-Profile']).toBe('research')
       expect(options.body).toBeInstanceOf(FormData)
+    })
+
+    it('uses the fnOS-safe Hermes auth header for multipart uploads', async () => {
+      vi.stubEnv('VITE_HERMES_FNOS_GATEWAY_COMPAT', '1')
+      setApiKey('secret-key')
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ files: [] }),
+      })
+
+      await uploadFiles('notes', [new File(['hello'], 'hello.txt', { type: 'text/plain' })])
+
+      const [, options] = mockFetch.mock.calls[0]
+      expect(options.headers.Authorization).toBeUndefined()
+      expect(options.headers['X-Hermes-Authorization']).toBe('Bearer secret-key')
+      vi.unstubAllEnvs()
     })
 
     it('uses an explicit profile selector instead of the active profile header', async () => {
