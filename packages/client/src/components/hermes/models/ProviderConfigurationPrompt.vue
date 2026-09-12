@@ -42,8 +42,12 @@ async function checkCurrentProfile() {
 
   loading.value = true
   try {
-    await modelsStore.fetchProviders()
+    const loaded = await modelsStore.fetchProviders()
     if (sequence !== checkSequence || profilesStore.activeProfileName !== profile) return
+    if (!loaded) {
+      show.value = false
+      return
+    }
     show.value = modelsStore.providers.length === 0
   } catch {
     if (sequence === checkSequence) show.value = false

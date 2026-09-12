@@ -11,7 +11,7 @@ const routeState = vi.hoisted(() => ({
 const modelsStore = vi.hoisted(() => ({
   providers: [] as Array<{ provider: string }>,
   allProviders: [{ provider: 'openai' }],
-  fetchProviders: vi.fn(async () => {}),
+  fetchProviders: vi.fn(async () => true),
 }))
 const profilesStore = vi.hoisted(() => ({
   activeProfileName: 'work' as string | null,
@@ -106,6 +106,16 @@ describe('ProviderConfigurationPrompt', () => {
     const wrapper = mount(ProviderConfigurationPrompt)
     await flushPromises()
 
+    expect(wrapper.find('.modal').exists()).toBe(false)
+  })
+
+  it('does not prompt when the provider check fails', async () => {
+    modelsStore.fetchProviders.mockResolvedValueOnce(false)
+
+    const wrapper = mount(ProviderConfigurationPrompt)
+    await flushPromises()
+
+    expect(modelsStore.fetchProviders).toHaveBeenCalledOnce()
     expect(wrapper.find('.modal').exists()).toBe(false)
   })
 

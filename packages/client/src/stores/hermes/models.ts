@@ -34,8 +34,8 @@ export const useModelsStore = defineStore('models', () => {
     ),
   )
 
-  async function fetchProviders() {
-    if (!hasApiKey()) return
+  async function fetchProviders(): Promise<boolean> {
+    if (!hasApiKey()) return false
     loading.value = true
     try {
       const profile = useProfilesStore().activeProfileName || 'default'
@@ -47,8 +47,10 @@ export const useModelsStore = defineStore('models', () => {
       allProviders.value = res.allProviders
       defaultModel.value = res.default
       defaultProvider.value = res.default_provider || ''
+      return true
     } catch (err) {
       console.error('Failed to fetch providers:', err)
+      return false
     } finally {
       loading.value = false
     }
