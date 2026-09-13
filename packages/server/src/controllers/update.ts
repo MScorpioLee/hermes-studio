@@ -1180,8 +1180,28 @@ function spawnFnosServiceRestart() {
   const cmdPath = String(process.env.HERMES_FNOS_CMD_PATH || '').trim()
   const appDir = String(process.env.HERMES_FNOS_APP_DIR || '').trim()
   const varDir = String(process.env.HERMES_FNOS_VAR_DIR || '').trim()
+  const appCenterCli = String(process.env.HERMES_FNOS_APPCENTER_CLI || '').trim() || '/usr/local/bin/appcenter-cli'
+  const appName = String(process.env.HERMES_FNOS_APP_NAME || '').trim() || 'hermes-studio'
   const logFile = String(process.env.HERMES_FNOS_RESTART_LOG || '').trim() || '/tmp/hermes-studio-fnos-restart.log'
   if (!cmdPath || !existsSync(cmdPath)) return null
+
+  if (existsSync(appCenterCli)) {
+    const script = [
+      'set +e',
+      'sleep 1',
+      '"$1" stop "$2" >> "$3" 2>&1',
+      'stop_status=$?',
+      '[ "$stop_status" -eq 0 ] || exit "$stop_status"',
+      '"$1" start "$2" >> "$3" 2>&1',
+    ].join('\n')
+
+    return spawn('/bin/sh', ['-c', script, 'hermes-fnos-restart', appCenterCli, appName, logFile], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      env: getCurrentNodeEnv(),
+    })
+  }
 
   const script = [
     'set +e',

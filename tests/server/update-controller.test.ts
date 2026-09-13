@@ -117,6 +117,9 @@ describe('update controller', () => {
     delete process.env.HERMES_FNOS_CMD_PATH
     delete process.env.HERMES_FNOS_APP_DIR
     delete process.env.HERMES_FNOS_VAR_DIR
+    delete process.env.HERMES_FNOS_APPCENTER_CLI
+    delete process.env.HERMES_FNOS_APP_NAME
+    delete process.env.HERMES_FNOS_RESTART_LOG
     vi.doUnmock('../../packages/server/src/services/runtime-version-manager')
   })
 
@@ -290,6 +293,61 @@ describe('update controller', () => {
       updated_layers: ['webui'],
       restart_required: true,
     })
+  })
+
+  it('restarts fnOS updates through App Center instead of triggering an app crash', async () => {
+    process.env.HERMES_WEB_UI_UPDATE_MODE = 'version-managed'
+    process.env.HERMES_FNOS_CMD_PATH = '/var/apps/hermes-studio/target/cmd/main'
+    process.env.HERMES_FNOS_APP_DIR = '/var/apps/hermes-studio/target'
+    process.env.HERMES_FNOS_VAR_DIR = '/var/apps/hermes-studio/var'
+    process.env.HERMES_FNOS_APPCENTER_CLI = '/usr/local/bin/appcenter-cli'
+    process.env.HERMES_FNOS_APP_NAME = 'hermes-studio'
+    process.env.HERMES_FNOS_RESTART_LOG = '/var/apps/hermes-studio/var/log/hermes-studio.log'
+    const runtimeVersions = {
+      getRuntimeVersionStatus: vi.fn().mockResolvedValue({
+        hermes: {
+          activeVersion: '0.21.0',
+          remoteVersions: ['0.21.0'],
+        },
+        webui: {
+          currentVersion: '0.6.43',
+          activeVersion: '0.6.43',
+          remoteVersions: ['0.6.43', '0.6.44'],
+        },
+      }),
+      downloadWebUiVersion: vi.fn().mockResolvedValue({
+        version: '0.6.44',
+        directory: '/var/apps/hermes-studio/var/hermes-web-ui/webui/0.6.44',
+        active: false,
+      }),
+      activateDownloadedWebUiVersion: vi.fn().mockReturnValue({
+        schema: 1,
+        webUiVersion: '0.6.44',
+        webUiDirectory: '/var/apps/hermes-studio/var/hermes-web-ui/webui/0.6.44',
+      }),
+      downloadRuntimeVersion: vi.fn(),
+      activateInstalledRuntimeVersion: vi.fn(),
+    }
+    const { handleUpdate, mocks } = await loadUpdateController({ runtimeVersions })
+    const ctx = createMockCtx()
+
+    await handleUpdate(ctx)
+
+    expect(ctx.body).toMatchObject({ success: true, restart_required: true })
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      '/bin/sh',
+      expect.arrayContaining([
+        'hermes-fnos-restart',
+        '/usr/local/bin/appcenter-cli',
+        'hermes-studio',
+        '/var/apps/hermes-studio/var/log/hermes-studio.log',
+      ]),
+      expect.objectContaining({ detached: true, stdio: 'ignore' }),
+    )
+    const restartScript = mocks.spawn.mock.calls[0]?.[1]?.[1]
+    expect(restartScript).toContain('"$1" stop "$2"')
+    expect(restartScript).toContain('"$1" start "$2"')
+    expect(restartScript).not.toContain(`kill -TERM ${process.pid}`)
   })
 
   it('installs the latest Hermes Runtime through version management when Web UI is current', async () => {
